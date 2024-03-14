@@ -1,2 +1,3 @@
 # data_projects
-Data Analysis and Data Science projects
+
+Repositório com projetos de dados e cases já trabalhados.
