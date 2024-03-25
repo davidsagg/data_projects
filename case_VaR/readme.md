@@ -20,4 +20,4 @@ Main highlights:
 - The exploratory data analysis (EDA) was done with Python, using Pandas, Matplotlib and Seaborn to generate the time series graphs, histograms, scatter plots and Pearson correlations.
 - I used functions to calculate VaR, identify missings and assemble the graphs.
 
-Full article link: [VaR Case](https://davidsaggioro.substack.com/p/risk-analysis-in-an-investment-portfolio).
+Full article here: [VaR Case](https://davidsaggioro.substack.com/p/risk-analysis-in-an-investment-portfolio).
