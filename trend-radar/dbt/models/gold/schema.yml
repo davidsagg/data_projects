@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: gold_trend_scores
+    description: >
+      Score de tendência semanal por artista (0–100), calculado como média
+      ponderada do crescimento relativo em Last.fm (40%), YouTube (35%)
+      e Deezer (25%). NULL quando histórico < 4 semanas.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "trend_score >= 0 AND trend_score <= 100"
+          config:
+            where: "trend_score IS NOT NULL"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "weeks_above_threshold >= 0"
+          config:
+            where: "weeks_above_threshold IS NOT NULL"
+    columns:
+      - name: artist_mbid
+        description: MusicBrainz ID do artista (chave composta com week_start).
+        data_tests:
+          - not_null
+      - name: week_start
+        description: Data de início da semana de referência (segunda-feira).
+        data_tests:
+          - not_null
+      - name: trend_score
+        description: Score de tendência normalizado entre 0 e 100. NULL se histórico insuficiente.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true
+              config:
+                where: "trend_score IS NOT NULL"
+      - name: score_lastfm
+        description: Contribuição Last.fm (peso 40%) para o trend_score. NULL se histórico insuficiente.
+      - name: score_youtube
+        description: Contribuição YouTube (peso 35%) para o trend_score. NULL se histórico insuficiente.
+      - name: score_deezer
+        description: Contribuição Deezer (peso 25%) para o trend_score. NULL se histórico insuficiente.
+      - name: weeks_above_threshold
+        description: >
+          Número cumulativo de semanas em que o artista esteve acima do threshold de 65 pontos.
+          Usado como critério de entrada em gold_rising_artists (mínimo 2 semanas).
+
+  - name: gold_rising_artists
+    description: >
+      Artistas em ascensão na semana mais recente: apenas quem ficou acima do threshold
+      (trend_score > 65) por 2 ou mais semanas consecutivas. Inclui direção da tendência
+      vs semana anterior e ranking semanal.
+    columns:
+      - name: artist_mbid
+        description: MusicBrainz ID do artista (chave composta com week_start).
+        data_tests:
+          - not_null
+      - name: week_start
+        description: Data de início da semana de referência (sempre a semana mais recente).
+        data_tests:
+          - not_null
+      - name: trend_score
+        description: Score de tendência normalizado entre 0 e 100.
+      - name: score_lastfm
+        description: Contribuição Last.fm (peso 40%) para o trend_score.
+      - name: score_youtube
+        description: Contribuição YouTube (peso 35%) para o trend_score.
+      - name: score_deezer
+        description: Contribuição Deezer (peso 25%) para o trend_score.
+      - name: weeks_above_threshold
+        description: >
+          Número cumulativo de semanas acima do threshold de 65 pontos.
+          Artistas nesta tabela têm weeks_above_threshold >= 2.
+      - name: name
+        description: Nome canônico do artista, vindo de silver_artists.
+      - name: country
+        description: País de origem do artista (ISO 3166-1 alpha-2), vindo de silver_artists.
+      - name: genres
+        description: Lista de tags/gêneros do artista, herdada de silver_artists.
+      - name: trending_direction
+        description: >
+          Direção da tendência comparando trend_score desta semana vs anterior:
+          'up' (delta > 5), 'down' (delta < -5) ou 'stable'.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['up', 'stable', 'down']
+      - name: rank_da_semana
+        description: Posição no ranking semanal, ordenado por trend_score DESC (1 = melhor score).
+
+  - name: gold_genre_heatmap
+    description: >
+      Score médio de tendência agregado por gênero musical por semana.
+      Apenas gêneros representados por 3 ou mais artistas distintos são incluídos,
+      garantindo significância estatística mínima.
+    columns:
+      - name: genre
+        description: Gênero musical extraído dos tags do artista em silver_artists.
+        data_tests:
+          - not_null
+      - name: week_start
+        description: Data de início da semana de referência.
+        data_tests:
+          - not_null
+      - name: avg_trend_score
+        description: Média dos trend_scores de todos os artistas do gênero naquela semana.
+      - name: artist_count
+        description: Número de artistas distintos que contribuíram para o gênero naquela semana.
+      - name: trending_direction
+        description: >
+          Direção da tendência do gênero: 'up' (delta > 5), 'down' (delta < -5) ou 'stable'.
+          Calculado comparando avg_trend_score desta semana vs semana anterior.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['up', 'stable', 'down']

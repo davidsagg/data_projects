@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/fit/
+data/gpx/
+data/processed/
+*.duckdb
+mlruns/
+.DS_Store

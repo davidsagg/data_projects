@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoAdvisor — Relatório {{ week_date }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0f0f13; color: #e2e8f0; line-height: 1.6; }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 1.6rem; font-weight: 700; color: #f8fafc;
+       border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 24px; }
+  h2 { font-size: 1.1rem; font-weight: 600; color: #94a3b8;
+       text-transform: uppercase; letter-spacing: .05em;
+       margin: 28px 0 12px; }
+  .card { background: #1e1e2e; border: 1px solid #2d2d3d; border-radius: 10px;
+          padding: 16px; margin-bottom: 12px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px;
+           font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+  .badge-buy    { background: #14532d; color: #4ade80; }
+  .badge-sell   { background: #4c0519; color: #f87171; }
+  .badge-hold   { background: #1e3a5f; color: #60a5fa; }
+  .badge-skip   { background: #2d2d2d; color: #94a3b8; }
+  .badge-high   { background: #14532d; color: #4ade80; }
+  .badge-medium { background: #78350f; color: #fbbf24; }
+  .badge-low    { background: #4c0519; color: #f87171; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric-label { font-size: .75rem; color: #64748b; }
+  .metric-value { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; }
+  .pos-pnl { color: #4ade80; }
+  .neg-pnl { color: #f87171; }
+  .tax-bar-wrap { background: #2d2d3d; border-radius: 9999px; height: 10px;
+                  overflow: hidden; margin: 8px 0; }
+  .tax-bar { height: 100%; border-radius: 9999px; transition: width .3s; }
+  .tax-safe     .tax-bar { background: #4ade80; }
+  .tax-warning  .tax-bar { background: #fbbf24; }
+  .tax-critical .tax-bar { background: #f97316; }
+  .tax-blocked  .tax-bar { background: #f87171; }
+  .rec-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .rec-symbol { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
+  .rec-prices { font-size: .85rem; color: #94a3b8; margin: 6px 0; }
+  .rec-prices span { margin-right: 12px; }
+  .rec-reasoning { font-size: .85rem; color: #cbd5e1; line-height: 1.5; }
+  .rec-tax-impact { font-size: .78rem; color: #fbbf24;
+                    border-left: 2px solid #fbbf24; padding-left: 8px; margin-top: 6px; }
+  .fg-badge { display: inline-block; padding: 4px 14px; border-radius: 9999px;
+              font-weight: 700; font-size: .9rem; margin-left: 8px; }
+  .fg-extreme-fear { background: #4c0519; color: #f87171; }
+  .fg-fear         { background: #78350f; color: #fb923c; }
+  .fg-neutral      { background: #1e3a5f; color: #60a5fa; }
+  .fg-greed        { background: #14532d; color: #4ade80; }
+  .fg-extreme-greed{ background: #064e3b; color: #34d399; }
+  .disclaimer { font-size: .75rem; color: #475569; margin-top: 32px;
+                border-top: 1px solid #2d2d3d; padding-top: 12px; }
+  @media(max-width:600px){ .grid-2{ grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>📊 CryptoAdvisor — Relatório Semanal {{ week_date }}</h1>
+
+  {# ── Helpers ────────────────────────────────────────────────────────────── #}
+  {# Formato brasileiro: 396.997,50  (. = milhar, , = decimal) #}
+  {%- macro fmt_brl(value) -%}
+    {{- "{:,.2f}".format(value).replace(",", "X").replace(".", ",").replace("X", ".") -}}
+  {%- endmacro -%}
+
+  {%- macro brl(usd) -%}
+    {%- if usd and usd > 0 -%}
+      R$&nbsp;{{ fmt_brl(usd * usd_brl_rate) }}
+    {%- else -%}—{%- endif -%}
+  {%- endmacro -%}
+
+  {%- macro brl_direct(value) -%}
+    R$&nbsp;{{ fmt_brl(value) }}
+  {%- endmacro -%}
+
+  {%- macro pct_color(v) -%}{{ '#4ade80' if v >= 0 else '#f87171' }}{%- endmacro -%}
+
+  {%- set action_label = {'BUY': 'COMPRA', 'SELL': 'VENDA', 'HOLD': 'MANTER', 'SKIP': 'IGNORAR'} -%}
+  {%- set confidence_label = {'high': 'Alta', 'medium': 'Média', 'low': 'Baixa'} -%}
+  {%- set fg_pt = {
+      'Extreme Fear': 'Medo Extremo',
+      'Fear':         'Medo',
+      'Neutral':      'Neutro',
+      'Greed':        'Ganância',
+      'Extreme Greed':'Ganância Extrema'
+  } -%}
+
+  {# ── Portfólio ──────────────────────────────────────────────────────────── #}
+  <h2>💼 Portfólio</h2>
+  <div class="card">
+    <div class="grid-2">
+      <div>
+        <div class="metric-label">Valor total</div>
+        <div class="metric-value">{{ brl_direct(portfolio_total_brl) }}</div>
+      </div>
+      <div>
+        <div class="metric-label">P&L acumulado</div>
+        <div class="metric-value {{ 'pos-pnl' if portfolio_pnl_brl >= 0 else 'neg-pnl' }}">
+          {{ "+" if portfolio_pnl_brl >= 0 else "" }}{{ brl_direct(portfolio_pnl_brl) }}
+        </div>
+      </div>
+    </div>
+    {% if portfolio %}
+    <table style="width:100%;margin-top:12px;font-size:.85rem;border-collapse:collapse">
+      <thead>
+        <tr style="color:#64748b">
+          <th style="text-align:left;padding:4px 0">Ativo</th>
+          <th style="text-align:right">Qtd</th>
+          <th style="text-align:right">Preço médio</th>
+          <th style="text-align:right">Atual</th>
+          <th style="text-align:right">P&L</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pos in portfolio %}
+        {%- set current_brl = current_prices_brl.get(pos.symbol, 0) -%}
+        {%- set avg = pos.avg_price_brl -%}
+        {%- set has_avg = avg and avg > 0 -%}
+        {%- set has_current = current_brl and current_brl > 0 -%}
+        {%- set pnl = (current_brl - avg) * pos.quantity if (has_avg and has_current) else 0 -%}
+        {%- set pnl_pct = ((current_brl / avg) - 1) * 100 if (has_avg and has_current) else 0 -%}
+        <tr style="border-top:1px solid #2d2d3d">
+          <td style="padding:6px 0;font-weight:600">{{ pos.symbol }}</td>
+          <td style="text-align:right">{{ "%.8f"|format(pos.quantity) }}</td>
+          <td style="text-align:right">
+            {%- if has_avg -%}{{ brl_direct(avg) }}{%- else -%}<span style="color:#64748b">—</span>{%- endif -%}
+          </td>
+          <td style="text-align:right">
+            {%- if has_current -%}{{ brl_direct(current_brl) }}{%- else -%}<span style="color:#64748b">—</span>{%- endif -%}
+          </td>
+          <td style="text-align:right;color:{{ pct_color(pnl) if (has_avg and has_current) else '#64748b' }}">
+            {%- if has_avg and has_current -%}
+              {{ "+" if pnl >= 0 else "" }}{{ brl_direct(pnl) }}
+              <span style="font-size:.75rem">({{ "%+.1f"|format(pnl_pct) }}%)</span>
+            {%- else -%}—{%- endif -%}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#64748b;margin-top:8px">Portfólio não disponível.</p>
+    {% endif %}
+  </div>
+
+  {# ── Recomendações ──────────────────────────────────────────────────────── #}
+  <h2>🎯 Recomendações da Semana ({{ recommendations|length }})</h2>
+  {% if recommendations %}
+    {% for rec in recommendations %}
+    <div class="card">
+      <div class="rec-header">
+        <span class="rec-symbol">{{ rec.symbol }}</span>
+        <span class="badge badge-{{ rec.action|lower }}">{{ action_label.get(rec.action, rec.action) }}</span>
+        <span class="badge badge-{{ rec.confidence }}">{{ confidence_label.get(rec.confidence, rec.confidence) }}</span>
+        {% if rec.risk_reward_ratio %}
+          <span style="font-size:.8rem;color:#94a3b8"
+                title="Para cada R$1 de risco, potencial de R${{ '%.1f'|format(rec.risk_reward_ratio) }} de ganho">
+            RR {{ "%.1f"|format(rec.risk_reward_ratio) }}x
+          </span>
+        {% endif %}
+      </div>
+      {% if rec.entry_price_usd and rec.entry_price_usd > 0 %}
+      <div class="rec-prices">
+        <span>📥 Entrada: <strong>{{ brl(rec.entry_price_usd) }}</strong></span>
+        <span>🛑 Stop: <strong>{{ brl(rec.stop_loss_usd) }}</strong></span>
+        <span>🎯 Alvo: <strong>{{ brl(rec.target_price_usd) }}</strong></span>
+      </div>
+      {% endif %}
+      <div class="rec-reasoning">{{ rec.reasoning }}</div>
+      {% if rec.tax_impact %}
+      <div class="rec-tax-impact">🧾 {{ rec.tax_impact }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="card"><p style="color:#64748b">Nenhuma recomendação gerada esta semana.</p></div>
+  {% endif %}
+
+  {# ── Status Fiscal ──────────────────────────────────────────────────────── #}
+  <h2>🧾 Status Fiscal (IN RFB 2.312/2026)</h2>
+  {% if tax_context %}
+  {% set pct = (tax_context.total_sold_brl / tax_context.limit_brl * 100)|round(1) %}
+  {%- set zone_label = {'safe': 'SEGURO', 'warning': 'ATENÇÃO', 'critical': 'CRÍTICO', 'blocked': 'BLOQUEADO'} -%}
+  {%- set zone_badge = {'safe': 'buy', 'warning': 'hold', 'critical': 'sell', 'blocked': 'sell'} -%}
+  <div class="card tax-{{ tax_context.zone }}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span>Vendas em {{ week_date[:7] }}</span>
+      <span class="badge badge-{{ zone_badge.get(tax_context.zone, 'hold') }}">
+        {{ zone_label.get(tax_context.zone, tax_context.zone|upper) }}
+      </span>
+    </div>
+    <div class="tax-bar-wrap">
+      <div class="tax-bar" style="width:{{ [pct, 100]|min }}%"></div>
+    </div>
+    <div style="font-size:.85rem;color:#94a3b8">
+      Vendido: {{ brl_direct(tax_context.total_sold_brl) }} /
+      Limite: {{ brl_direct(tax_context.limit_brl) }}
+      ({{ pct }}%)
+      &nbsp;·&nbsp; Margem disponível: {{ brl_direct(tax_context.margin_available_brl) }}
+    </div>
+    {% if tax_context.loss_harvest_candidates %}
+    <div style="margin-top:8px;font-size:.8rem;color:#fbbf24">
+      ⚠️ Candidatos para loss harvesting: {{ tax_context.loss_harvest_candidates|join(", ") }}
+    </div>
+    {% endif %}
+    {% if tax_context.instruction %}
+    <div style="margin-top:8px;font-size:.82rem;color:#94a3b8;font-style:italic">
+      {{ tax_context.instruction }}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+    <div class="card"><p style="color:#64748b">Status fiscal não disponível.</p></div>
+  {% endif %}
+
+  {# ── Sentimento ─────────────────────────────────────────────────────────── #}
+  <h2>🌡️ Índice Fear &amp; Greed</h2>
+  <div class="card">
+    {% if fear_greed %}
+    {%- set fg_class = {
+        'Extreme Fear': 'fg-extreme-fear',
+        'Fear':         'fg-fear',
+        'Neutral':      'fg-neutral',
+        'Greed':        'fg-greed',
+        'Extreme Greed':'fg-extreme-greed'
+      }.get(fear_greed.classification, 'fg-neutral') -%}
+    <span style="font-size:1.4rem;font-weight:700">{{ fear_greed.value }}</span>
+    <span class="fg-badge {{ fg_class }}">
+      {{ fg_pt.get(fear_greed.classification, fear_greed.classification) }}
+    </span>
+    <p style="margin-top:8px;font-size:.85rem;color:#94a3b8">{{ market_summary }}</p>
+    {% else %}
+    <p style="color:#64748b">Fear &amp; Greed não disponível.</p>
+    {% endif %}
+  </div>
+
+  {# ── Top Markets ────────────────────────────────────────────────────────── #}
+  {% if top_markets %}
+  <h2>📈 Top 10 por Market Cap</h2>
+  <div class="card">
+    <table style="width:100%;font-size:.82rem;border-collapse:collapse">
+      <thead>
+        <tr style="color:#64748b">
+          <th style="text-align:left;padding:4px 0">#</th>
+          <th style="text-align:left">Ativo</th>
+          <th style="text-align:right">Preço</th>
+          <th style="text-align:right">24h</th>
+          <th style="text-align:right">7d</th>
+          <th style="text-align:right">MCap</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in top_markets[:10] %}
+        <tr style="border-top:1px solid #2d2d3d">
+          <td style="padding:5px 0;color:#64748b">{{ m.market_cap_rank or loop.index }}</td>
+          <td style="font-weight:600">{{ m.symbol }}</td>
+          <td style="text-align:right">
+            R$&nbsp;{{ fmt_brl(m.price_brl) }}
+          </td>
+          <td style="text-align:right;color:{{ pct_color(m.change_24h_pct) }}">
+            {{ "%+.1f"|format(m.change_24h_pct) }}%
+          </td>
+          <td style="text-align:right;color:{{ pct_color(m.change_7d_pct) }}">
+            {{ "%+.1f"|format(m.change_7d_pct) }}%
+          </td>
+          <td style="text-align:right;color:#94a3b8">
+            R$&nbsp;{{ "{:,.2f}".format(m.market_cap_usd * usd_brl_rate / 1e9).replace(",", "X").replace(".", ",").replace("X", ".") }}B
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <p class="disclaimer">
+    ⚠️ Este relatório é gerado por inteligência artificial (Claude Sonnet) com base em dados públicos de mercado.
+    <strong>Não constitui recomendação de investimento.</strong> Toda decisão de compra ou venda é de
+    responsabilidade exclusiva do usuário. Consulte um profissional financeiro antes de investir.
+    Os dados fiscais são estimativas auxiliares baseadas na IN RFB 2.312/2026 — consulte um contador
+    para a declaração de Imposto de Renda.
+  </p>
+
+</div>
+</body>
+</html>

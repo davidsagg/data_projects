@@ -1,0 +1,11 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+langchain==0.1.0
+langchain-core==0.1.0
+langchain-community==0.0.13
+langchain-ollama==0.1.0
+langchain-chroma==0.1.2
+chromadb==0.4.17
+openpyxl==3.11.0

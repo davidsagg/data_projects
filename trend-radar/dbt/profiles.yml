@@ -1,0 +1,11 @@
+trend_radar:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /workspace/data/trend_radar.duckdb
+      threads: 4
+    test:
+      type: duckdb
+      path: /workspace/data/trend_radar_test.duckdb
+      threads: 4

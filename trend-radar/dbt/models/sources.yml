@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw
+    description: 'Tabelas bronze ingeridas pelos clientes de API'
+    schema: main
+    freshness:
+      warn_after: {count: 8, period: day}
+      error_after: {count: 14, period: day}
+    loaded_at_field: ingested_at
+    tables:
+      - name: bronze_lastfm_artist_weekly
+        description: 'Dados semanais do Last.fm — chart rank, listeners, playcount e tags por artista.'
+      - name: bronze_youtube_channel_weekly
+        description: 'Dados semanais do YouTube — views, subscribers e contagem de vídeos por canal.'
+      - name: bronze_deezer_artist_weekly
+        description: 'Dados semanais do Deezer — nb_fan, nb_album e posição no chart por artista.'

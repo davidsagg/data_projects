@@ -1,0 +1,201 @@
+// Prisma Schema for OKR Portfolio Dashboard
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects    Project[]
+  objectives  Objective[]
+  initiatives Initiative[]
+
+  @@map("users")
+}
+
+// Project model
+model Project {
+  id              String        @id @default(uuid())
+  title           String
+  description     String
+  category        ProjectCategory
+  status          ProjectStatus
+  priority        ProjectPriority
+  progress        Int           @default(0)
+  startDate       DateTime
+  targetEndDate   DateTime?
+  actualEndDate   DateTime?
+  tags            String[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  milestones      Milestone[]
+  redFlags        RedFlag[]
+  objectiveIds    String[]
+
+  @@map("projects")
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+}
+
+// Objective (OKR) model
+model Objective {
+  id          String      @id @default(uuid())
+  title       String
+  description String
+  category    ProjectCategory
+  quarter     String?
+  status      OKRStatus
+  progress    Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  keyResults  KeyResult[]
+
+  @@map("objectives")
+  @@index([userId])
+  @@index([status])
+}
+
+// Key Result model
+model KeyResult {
+  id          String    @id @default(uuid())
+  description String
+  target      Float
+  current     Float     @default(0)
+  unit        String
+  status      OKRStatus
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  objectiveId String
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@map("key_results")
+  @@index([objectiveId])
+}
+
+// Milestone model
+model Milestone {
+  id          String          @id @default(uuid())
+  title       String
+  description String
+  date        DateTime
+  completed   Boolean         @default(false)
+  category    ProjectCategory
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("milestones")
+  @@index([projectId])
+  @@index([date])
+}
+
+// Red Flag model
+model RedFlag {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  severity    FlagSeverity
+  resolved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("red_flags")
+  @@index([projectId])
+  @@index([resolved])
+}
+
+// Initiative model
+model Initiative {
+  id              String            @id @default(uuid())
+  title           String
+  description     String
+  category        ProjectCategory
+  status          InitiativeStatus
+  priority        ProjectPriority
+  estimatedEffort String?
+  potentialImpact String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("initiatives")
+  @@index([userId])
+  @@index([status])
+}
+
+// Enums
+enum ProjectCategory {
+  work
+  training
+  music
+  personal
+  learning
+  other
+}
+
+enum ProjectStatus {
+  planning
+  active
+  on_hold
+  completed
+  cancelled
+}
+
+enum ProjectPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum OKRStatus {
+  not_started
+  in_progress
+  at_risk
+  completed
+}
+
+enum FlagSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum InitiativeStatus {
+  idea
+  planned
+  in_progress
+  completed
+  abandoned
+}

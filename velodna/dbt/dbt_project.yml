@@ -1,0 +1,9 @@
+name: velodna
+version: "1.0.0"
+config-version: 2
+profile: velodna
+model-paths: ["models"]
+target-path: "target"
+models:
+  velodna:
+    +materialized: view

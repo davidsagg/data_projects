@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- Identificador único do serviço -->
+  <key>Label</key>
+  <string>com.dave.special_gear</string>
+
+  <!-- Comando a executar -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/python3</string>
+    <string>/Users/davidsaggioro/data_projects/special_gear/main.py</string>
+  </array>
+
+  <!-- Diretório de trabalho -->
+  <key>WorkingDirectory</key>
+  <string>/Users/davidsaggioro/data_projects/special_gear</string>
+
+  <!-- Inicia automaticamente ao fazer login -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Reinicia o processo se ele morrer -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- Logs de saída padrão -->
+  <key>StandardOutPath</key>
+  <string>/Users/davidsaggioro/Library/Logs/special_gear_monitor.log</string>
+
+  <!-- Logs de erros -->
+  <key>StandardErrorPath</key>
+  <string>/Users/davidsaggioro/Library/Logs/special_gear_monitor.log</string>
+
+  <!-- Variáveis de ambiente (carregadas do .env pelo dotenv no código) -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+</dict>
+</plist>
+
+<!--
+  ╔══════════════════════════════════════════════════════════╗
+  ║              INSTALAÇÃO NO MACOS (launchd)               ║
+  ╚══════════════════════════════════════════════════════════╝
+
+  1. Copiar o plist para LaunchAgents:
+     cp com.dave.monitor.plist ~/Library/LaunchAgents/
+
+  2. Carregar o serviço (inicia imediatamente):
+     launchctl load ~/Library/LaunchAgents/com.dave.monitor.plist
+
+  3. Iniciar manualmente (se já carregado):
+     launchctl start com.dave.special_gear
+
+  4. Verificar status:
+     launchctl list | grep special_gear
+
+  5. Ver logs em tempo real:
+     tail -f ~/Library/Logs/special_gear_monitor.log
+
+  6. Parar o serviço:
+     launchctl stop com.dave.special_gear
+
+  7. Desinstalar:
+     launchctl unload ~/Library/LaunchAgents/com.dave.monitor.plist
+     rm ~/Library/LaunchAgents/com.dave.monitor.plist
+
+  NOTA: Substitua /usr/local/bin/python3 pelo caminho do seu Python,
+  caso esteja usando pyenv ou conda. Para descobrir: which python3
+-->

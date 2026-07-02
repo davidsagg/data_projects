@@ -1,0 +1,135 @@
+{# Partial: single recommendation card. Context: rec (dict), rate (float) #}
+{% set action_labels = {'BUY': 'COMPRAR', 'SELL': 'VENDER', 'HOLD': 'MANTER', 'SKIP': 'AGUARDAR'} %}
+{% set action_label = action_labels.get(rec.action, rec.action) %}
+{% set trend_labels = {'BUY': 'ALTA', 'SELL': 'BAIXA', 'HOLD': 'NEUTRO'} %}
+{% set trend = trend_labels.get(rec.action, '') %}
+
+{% if rec.action == 'BUY' %}{% set border = 'border-l-4 border-green-500/50' %}
+{% elif rec.action == 'SELL' %}{% set border = 'border-l-4 border-red-500/50' %}
+{% elif rec.action == 'HOLD' %}{% set border = 'border-l-4 border-blue-500/50' %}
+{% else %}{% set border = 'border-l-4 border-slate-600/40' %}{% endif %}
+
+<div id="rec-{{ rec.id }}" class="card p-5 {{ border }}">
+
+  <!-- Symbol + date -->
+  <div class="flex items-start justify-between mb-3">
+    <span class="font-bold text-lg tracking-tight">{{ rec.symbol }}</span>
+    <span class="text-xs muted">{{ rec.week_date }}</span>
+  </div>
+
+  <!-- Action + trend + confidence badges -->
+  <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide
+      {%- if rec.action == 'BUY' %} bg-green-500/20 text-green-400 border border-green-500/30
+      {%- elif rec.action == 'SELL' %} bg-red-500/20 text-red-400 border border-red-500/30
+      {%- elif rec.action == 'HOLD' %} bg-blue-500/20 text-blue-400 border border-blue-500/30
+      {%- else %} bg-slate-500/15 text-slate-400 border border-slate-600/30{%- endif %}">
+      {{ action_label }}
+    </span>
+
+    {% if trend %}
+    <span class="text-xs font-medium
+      {%- if rec.action == 'BUY' %} text-green-400
+      {%- elif rec.action == 'SELL' %} text-red-400
+      {%- else %} text-slate-400{%- endif %}">
+      {%- if rec.action == 'BUY' %}↗ {{ trend }}
+      {%- elif rec.action == 'SELL' %}↘ {{ trend }}
+      {%- else %}→ {{ trend }}{%- endif %}
+    </span>
+    {% endif %}
+
+    <span class="px-2 py-0.5 rounded-full text-xs
+      {%- if rec.confidence == 'high' %} bg-green-500/10 text-green-400
+      {%- elif rec.confidence == 'medium' %} bg-yellow-500/10 text-yellow-400
+      {%- else %} bg-slate-500/10 text-slate-500{%- endif %}">
+      {{ (rec.confidence or 'low') | capitalize }}
+    </span>
+  </div>
+
+  <!-- Price targets in BRL -->
+  {% if rec.entry_price_usd and rec.entry_price_usd > 0 %}
+  <div class="grid grid-cols-3 gap-2 mb-3">
+    <div class="bg-dim rounded-lg p-3">
+      <p class="text-xs muted mb-1">📥 Entrada</p>
+      <p class="font-semibold text-sm">{{ (rec.entry_price_usd * rate) | brl }}</p>
+    </div>
+    {% if rec.stop_loss_usd %}
+    <div class="bg-dim rounded-lg p-3">
+      <p class="text-xs muted mb-1">🛑 Stop</p>
+      <p class="font-semibold text-sm loss">{{ (rec.stop_loss_usd * rate) | brl }}</p>
+    </div>
+    {% endif %}
+    {% if rec.target_price_usd %}
+    <div class="bg-dim rounded-lg p-3">
+      <p class="text-xs muted mb-1">🎯 Alvo</p>
+      <p class="font-semibold text-sm gain">{{ (rec.target_price_usd * rate) | brl }}</p>
+    </div>
+    {% endif %}
+  </div>
+  {% if rec.risk_reward_ratio %}
+  <p class="text-xs muted mb-3">
+    Risco / Retorno: <span class="text-slate-200 font-medium">{{ "%.1f" | format(rec.risk_reward_ratio) }}x</span>
+  </p>
+  {% endif %}
+  {% endif %}
+
+  <!-- Reasoning -->
+  <p class="text-sm text-slate-300 leading-relaxed mb-3">{{ rec.reasoning }}</p>
+
+  <!-- Tax impact -->
+  {% if rec.tax_impact %}
+  <div class="flex items-start gap-2 px-3 py-2 rounded-lg
+              bg-yellow-500/5 border border-yellow-500/20 mb-4">
+    <span class="text-yellow-400 shrink-0">🧾</span>
+    <p class="text-xs text-yellow-200">{{ rec.tax_impact }}</p>
+  </div>
+  {% endif %}
+
+  <!-- Buttons (pending) or status badge (reviewed) -->
+  {% if rec.status == 'pending' %}
+  <div class="flex gap-2 pt-1 flex-wrap">
+    <button
+      hx-post="/api/recommendations/{{ rec.id }}/approve"
+      hx-target="#rec-{{ rec.id }}"
+      hx-swap="outerHTML"
+      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors
+             bg-green-600/15 hover:bg-green-600/25 text-green-400
+             border border-green-600/30 hover:border-green-500/50">
+      ✅ Aprovar
+    </button>
+    <button
+      hx-post="/api/recommendations/{{ rec.id }}/reject"
+      hx-target="#rec-{{ rec.id }}"
+      hx-swap="outerHTML"
+      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors
+             bg-red-600/10 hover:bg-red-600/20 text-red-400
+             border border-red-600/25 hover:border-red-500/40">
+      ❌ Rejeitar
+    </button>
+    <button
+      hx-post="/api/recommendations/{{ rec.id }}/dismiss"
+      hx-target="#rec-{{ rec.id }}"
+      hx-swap="outerHTML"
+      class="ml-auto px-3 py-2 rounded-lg text-sm transition-colors
+             text-slate-500 hover:text-slate-300 hover:bg-slate-700/40">
+      Ignorar ✕
+    </button>
+  </div>
+  {% elif rec.status == 'approved' %}
+  <div class="flex items-center gap-2 px-3 py-2 rounded-lg
+              bg-green-500/5 border border-green-500/20 text-green-400 text-sm">
+    <span>✅</span>
+    <span>Aprovada — execute o trade manualmente no Mercado Bitcoin.</span>
+  </div>
+  {% elif rec.status == 'rejected' %}
+  <div class="flex items-center gap-2 px-3 py-2 rounded-lg
+              bg-zinc-800/40 border border-zinc-700 text-zinc-500 text-sm">
+    <span>❌</span><span>Rejeitada.</span>
+  </div>
+  {% else %}
+  <div class="px-3 py-2 rounded-lg bg-slate-500/5 border border-slate-600/30 text-slate-500 text-xs">
+    {{ rec.status | capitalize }}
+  </div>
+  {% endif %}
+
+</div>

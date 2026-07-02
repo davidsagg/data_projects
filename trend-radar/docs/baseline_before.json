@@ -1,0 +1,7 @@
+{
+  "gold_trend_scores_ms": 18.5,
+  "rising_artists_join_ms": 22.7,
+  "heatmap_compute_ms": 8.3,
+  "anomaly_detection_ms": 1180.4,
+  "db_size_mb": 0.8
+}

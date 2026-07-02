@@ -1,0 +1,21 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+*.egg-info/
+
+# Runtime data
+data/cache/
+data/reports/
+data/*.db
+scripts/data/
+
+# OS
+.DS_Store
+
+# Claude Code settings
+.claude/

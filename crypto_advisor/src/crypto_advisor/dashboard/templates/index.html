@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CryptoAdvisor{% endblock %}
+
+{% block content %}
+
+<!-- ─── Header: Total Portfolio Value ─────────────────────────────────────── -->
+<div class="mb-6">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+
+    <!-- Value summary -->
+    <div>
+      <p class="text-xs muted mb-1 uppercase tracking-wide">Portfólio Total</p>
+      <div class="flex items-baseline gap-3 flex-wrap">
+        <span class="text-4xl font-bold tracking-tight">{{ total_value_brl | brl }}</span>
+        {% if total_pnl_brl != 0 %}
+        <span class="text-lg font-medium {{ 'gain' if total_pnl_brl >= 0 else 'loss' }}">
+          {{ total_pnl_brl | brl }}
+          <span class="text-base">({{ total_pnl_pct | pct }})</span>
+        </span>
+        {% endif %}
+      </div>
+      {% if prices_updated_at %}
+        <p class="text-xs muted mt-1">Preços ao vivo · {{ prices_updated_at }}</p>
+      {% else %}
+        <p class="text-xs text-yellow-400/80 mt-1">⚠ Preços ao vivo indisponíveis — exibindo preço médio</p>
+      {% endif %}
+    </div>
+
+    <!-- Action buttons -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <button
+          hx-post="/api/sync-portfolio"
+          hx-target="#sync-status"
+          hx-swap="outerHTML"
+          class="px-3 py-2 border border-[#2a3450] hover:border-slate-500 text-slate-300
+                 text-sm rounded-lg transition-colors flex items-center gap-1.5">
+          <span>↻</span><span>Sincronizar MB</span>
+        </button>
+        <span id="sync-status" class="text-xs muted"></span>
+      </div>
+      {{ analysis_widget | safe }}
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── Asset cards ───────────────────────────────────────────────────────── -->
+{% if positions %}
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-6">
+  {% for pos in positions %}
+  <div class="card p-4 hover:border-slate-500 transition-colors">
+
+    <div class="flex items-center justify-between mb-2">
+      <span class="font-semibold text-sm">{{ pos.symbol }}</span>
+      {% if pos.pnl_pct != 0 %}
+        <span class="text-xs font-medium {{ 'gain' if pos.pnl_pct >= 0 else 'loss' }}">
+          {{ pos.pnl_pct | pct }}
+        </span>
+      {% endif %}
+    </div>
+
+    <p class="text-xs muted mb-1">{{ pos.quantity | qty }} {{ pos.symbol }}</p>
+    <p class="font-semibold text-sm">{{ pos.value_brl | brl }}</p>
+
+    {% if pos.symbol != 'BRL' %}
+      <p class="text-xs muted mt-1">Preço: {{ pos.current_price_brl | brl }}</p>
+      {% if pos.pnl_brl != 0 %}
+        <p class="text-xs mt-0.5 {{ 'gain' if pos.pnl_brl >= 0 else 'loss' }}">
+          {{ pos.pnl_brl | brl }}
+        </p>
+      {% endif %}
+      {% if not pos.has_live_price %}
+        <p class="text-[10px] text-yellow-400/60 mt-1">preço médio</p>
+      {% endif %}
+    {% endif %}
+
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card p-10 text-center mb-6">
+  <p class="text-slate-400 mb-2">Portfólio vazio.</p>
+  <p class="text-sm muted">
+    Clique em <strong class="text-slate-300">Sincronizar MB</strong> para importar saldos
+    ou em <strong class="text-slate-300">Executar Análise IA</strong> para rodar o pipeline completo.
+  </p>
+</div>
+{% endif %}
+
+<!-- ─── Charts row ────────────────────────────────────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+
+  <!-- Portfolio evolution (2/3 width) -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-medium text-slate-300">{{ chart_label }}</h2>
+      {% if chart_dates | length > 0 %}
+        <span class="text-xs muted">{{ chart_dates | length }} registro(s)</span>
+      {% endif %}
+    </div>
+
+    {% if chart_dates | length >= 2 %}
+      <div id="portfolio-chart" style="height: 270px;"></div>
+    {% elif chart_dates | length == 1 %}
+      <div class="flex flex-col items-center justify-center h-48 gap-2 text-center">
+        <span class="text-3xl">📊</span>
+        <p class="text-sm text-slate-400">Coletando dados de evolução...</p>
+        <p class="text-xs muted">O gráfico aparecerá após o segundo registro (≥ 1 hora).</p>
+        <div class="mt-2 text-xs bg-dim px-3 py-2 rounded-lg text-slate-400">
+          Valor atual: <span class="text-white font-medium">{{ total_value_brl | brl }}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="flex flex-col items-center justify-center h-48 gap-2 text-center">
+        <span class="text-3xl">📊</span>
+        <p class="text-sm text-slate-400">Histórico ainda não disponível.</p>
+        <p class="text-xs muted">Sincronize o portfólio para começar a registrar a evolução.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Composition (1/3 width) -->
+  <div class="card p-5">
+    <h2 class="text-sm font-medium text-slate-300 mb-3">Composição</h2>
+    {% if positions %}
+      <div id="composition-chart" style="height: 270px;"></div>
+    {% else %}
+      <div class="flex items-center justify-center h-48 muted text-sm">
+        Sem posições
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ─── Bottom row: Fear & Greed + Tax Zone ───────────────────────────────── -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+  <!-- Fear & Greed -->
+  <div class="card p-5">
+    <h2 class="text-sm font-medium text-slate-300 mb-3">Fear &amp; Greed Index</h2>
+    {% if fear_greed %}
+      <div id="fg-gauge" style="height: 190px;"></div>
+    {% else %}
+      <div class="flex flex-col items-center justify-center h-36 gap-2 text-center">
+        <p class="text-sm muted">Índice não disponível</p>
+        <p class="text-xs muted">CoinGecko free tier — tente novamente em alguns minutos.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Tax Zone -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-medium text-slate-300">Status Fiscal</h2>
+      <a href="/tax" class="text-xs text-blue-400 hover:text-blue-300">Ver detalhes →</a>
+    </div>
+
+    <div class="flex items-center gap-3 mb-3">
+      <span class="px-3 py-1.5 rounded-full font-semibold text-sm badge-{{ tax_status.zone }}">
+        {{ tax_status.zone | upper }}
+      </span>
+      <span class="text-xs muted">
+        {{ tax_status.total_sold_brl | brl }} / {{ tax_status.limit_brl | brl }}
+      </span>
+    </div>
+
+    {% set pct = tax_status.total_sold_brl / tax_status.limit_brl * 100 %}
+    <div class="w-full bg-dim rounded-full h-2.5 mb-3">
+      <div class="h-2.5 rounded-full transition-all
+        {%- if tax_status.zone == 'safe' %} bg-green-500
+        {%- elif tax_status.zone == 'warning' %} bg-yellow-500
+        {%- elif tax_status.zone == 'critical' %} bg-orange-500
+        {%- else %} bg-red-500{%- endif %}"
+        style="width: {{ [pct, 100] | min }}%">
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-400 leading-relaxed">{{ tax_status.instruction }}</p>
+    <p class="text-xs muted mt-2">
+      Margem disponível: <span class="text-slate-300">{{ tax_status.margin_available_brl | brl }}</span>
+    </p>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  const DARK_LAYOUT = {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  'transparent',
+    font: { color: '#64748b', size: 11, family: 'system-ui' },
+    margin: { t: 8, r: 8, b: 40, l: 65 },
+    xaxis: { gridcolor: '#2a3450', linecolor: '#2a3450', tickcolor: '#2a3450' },
+    yaxis: {
+      gridcolor: '#2a3450', linecolor: '#2a3450', tickcolor: '#2a3450',
+      tickprefix: 'R$ ', tickformat: ',.0f',
+    },
+    legend: { x: 0, y: 1.05, orientation: 'h', font: { size: 11, color: '#94a3b8' } },
+    hovermode: 'x unified',
+    hoverlabel: {
+      bgcolor: '#1e2536', bordercolor: '#2a3450',
+      font: { color: '#e2e8f0', size: 12 },
+    },
+  };
+
+  const CONFIG = { displayModeBar: false, responsive: true };
+
+  // ── Portfolio evolution chart ──────────────────────────────────────────────
+  {% if chart_dates | length >= 2 %}
+  Plotly.newPlot('portfolio-chart', [
+    {
+      x: {{ chart_dates | tojson }},
+      y: {{ chart_values | tojson }},
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Valor',
+      fill: 'tonexty',
+      fillcolor: 'rgba(34,197,94,0.06)',
+      line: { color: '#22c55e', width: 2 },
+      hovertemplate: '<b>Valor</b>: R$ %{y:,.0f}<extra></extra>',
+    },
+    {
+      x: {{ chart_dates | tojson }},
+      y: {{ chart_costs | tojson }},
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Custo',
+      line: { color: '#64748b', width: 1.5, dash: 'dot' },
+      hovertemplate: '<b>Custo</b>: R$ %{y:,.0f}<extra></extra>',
+    },
+  ], DARK_LAYOUT, CONFIG);
+  {% endif %}
+
+  // ── Composition donut ──────────────────────────────────────────────────────
+  {% if positions %}
+  const positions = {{ positions | tojson }};
+  const nonBrl = positions.filter(p => p.symbol !== 'BRL' && p.value_brl > 0);
+  if (nonBrl.length > 0 && document.getElementById('composition-chart')) {
+    Plotly.newPlot('composition-chart', [{
+      labels: nonBrl.map(p => p.symbol),
+      values: nonBrl.map(p => p.value_brl),
+      type: 'pie',
+      hole: 0.5,
+      textinfo: 'label+percent',
+      textfont: { size: 11, color: '#94a3b8' },
+      marker: {
+        colors: ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6',
+                 '#06b6d4','#ec4899','#a3e635','#fb923c'],
+        line: { color: '#0f1117', width: 2 },
+      },
+      hovertemplate: '<b>%{label}</b><br>%{customdata}<br>%{percent}<extra></extra>',
+      customdata: nonBrl.map(p => {
+        const v = p.value_brl;
+        return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+      }),
+    }], {
+      paper_bgcolor: 'transparent',
+      plot_bgcolor:  'transparent',
+      font: { color: '#94a3b8', size: 11 },
+      margin: { t: 10, r: 10, b: 10, l: 10 },
+      showlegend: false,
+      hoverlabel: {
+        bgcolor: '#1e2536', bordercolor: '#2a3450',
+        font: { color: '#e2e8f0', size: 12 },
+      },
+    }, CONFIG);
+  }
+  {% endif %}
+
+  // ── Fear & Greed gauge ────────────────────────────────────────────────────
+  {% if fear_greed %}
+  const fgValue = {{ fear_greed.value }};
+  const fgLabel = {{ fear_greed.classification | tojson }};
+  const fgColor =
+    fgValue < 25 ? '#ef4444' :
+    fgValue < 45 ? '#f97316' :
+    fgValue < 55 ? '#eab308' :
+    fgValue < 75 ? '#22c55e' : '#16a34a';
+
+  Plotly.newPlot('fg-gauge', [{
+    type: 'indicator',
+    mode: 'gauge+number',
+    value: fgValue,
+    number: { font: { size: 32, color: '#e2e8f0' } },
+    title: { text: fgLabel, font: { size: 13, color: '#94a3b8' } },
+    gauge: {
+      axis: {
+        range: [0, 100],
+        tickcolor: '#2a3450',
+        tickfont: { color: '#64748b', size: 10 },
+        nticks: 6,
+      },
+      bar: { color: fgColor, thickness: 0.28 },
+      bgcolor: '#1e2536',
+      bordercolor: '#2a3450',
+      borderwidth: 1,
+      steps: [
+        { range: [0,  25], color: 'rgba(239,68,68,0.08)' },
+        { range: [25, 45], color: 'rgba(249,115,22,0.08)' },
+        { range: [45, 55], color: 'rgba(234,179,8,0.08)' },
+        { range: [55, 75], color: 'rgba(34,197,94,0.08)' },
+        { range: [75,100], color: 'rgba(22,163,74,0.08)' },
+      ],
+    },
+  }], {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  'transparent',
+    font: { color: '#e2e8f0' },
+    margin: { t: 30, r: 25, b: 10, l: 25 },
+  }, CONFIG);
+  {% endif %}
+
+})();
+</script>
+{% endblock %}

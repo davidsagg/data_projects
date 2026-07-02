@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: silver_artists
+    description: >
+      Tabela unificada de artistas, enriquecida com mbid, tags e metadados
+      de todas as fontes de ingestão (Last.fm, MusicBrainz, Deezer, YouTube).
+    columns:
+      - name: mbid
+        description: MusicBrainz ID do artista (chave primária lógica).
+        data_tests:
+          - unique
+          - not_null:
+              config:
+                where: "source_lastfm = true"
+      - name: name
+        description: Nome canônico do artista.
+        data_tests:
+          - not_null
+      - name: source_lastfm
+        description: Flag indicando presença no Last.fm.
+      - name: week_start
+        description: Semana de referência da ingestão.
+
+  - name: silver_weekly_plays
+    description: >
+      Métricas semanais agregadas por artista: plays, listeners e streams
+      consolidados de todas as fontes.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - artist_mbid
+              - week_start
+    columns:
+      - name: artist_mbid
+        description: MusicBrainz ID do artista.
+        data_tests:
+          - not_null
+      - name: week_start
+        description: Data de início da semana (segunda-feira).
+        data_tests:
+          - not_null

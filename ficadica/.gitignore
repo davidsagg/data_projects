@@ -1,0 +1,28 @@
+# Credenciais e sessão
+.env
+data/session.json
+
+# HTML bruto do crawler (arquivos grandes, regeneráveis)
+data/raw/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+
+# Sistema
+.DS_Store
+*.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp
+*.swo
+
+# Playwright
+playwright/.local-browsers/

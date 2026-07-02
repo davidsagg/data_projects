@@ -1,0 +1,12 @@
+data/
+.env
+__pycache__/
+.dbt/
+*.db
+*.duckdb
+.airflow/
+logs/
+mlruns/
+.pytest_cache/
+*.egg-info/
+.venv/

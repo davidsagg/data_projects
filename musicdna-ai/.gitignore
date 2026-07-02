@@ -1,0 +1,30 @@
+# Dados e modelos (muito grandes para o Git)
+data/raw/
+data/processed/
+models/llm/
+*.pkl
+*.ckpt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Variaveis de ambiente
+.env
+.env.local
+
+# MLflow e Airflow
+mlflow/mlruns/
+airflow/logs/
+
+# macOS
+.DS_Store
+*.DS_Store
+
+#Docker volumes locais
+*.log

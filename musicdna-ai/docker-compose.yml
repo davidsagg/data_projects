@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: musicdna-api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - '8000:8000'
+    volumes:
+      - .:/workspace
+    environment:
+      - PYTHONPATH=/workspace/src
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    networks:
+      - musicdna-net
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  ui:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: musicdna-ui
+    command: streamlit run src/ui/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - '8501:8501'
+    volumes:
+      - .:/workspace
+    environment:
+      - PYTHONPATH=/workspace/src
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      - api
+    networks:
+      - musicdna-net
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: musicdna-mlflow
+    command: mlflow ui --host 0.0.0.0 --port 5000 --backend-store-uri /workspace/mlflow/mlruns
+    ports:
+      - '5000:5000'
+    volumes:
+      - .:/workspace
+    networks:
+      - musicdna-net
+
+  airflow:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: musicdna-airflow
+    command: >
+      bash -c 'export AIRFLOW_HOME=/workspace/airflow &&
+               airflow db migrate &&
+               airflow standalone'
+    ports:
+      - '8080:8080'
+    volumes:
+      - .:/workspace
+    environment:
+      - PYTHONPATH=/workspace/src
+      - AIRFLOW_HOME=/workspace/airflow
+    networks:
+      - musicdna-net
+
+networks:
+  musicdna-net:
+    driver: bridge

@@ -1,0 +1,29 @@
+{
+  "name": "MusicDNA AI Dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ],
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-python.black-formatter",
+        "ms-python.pylint",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "remoteUser": "developer",
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/src"
+  }
+}

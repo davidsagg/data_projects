@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}CryptoAdvisor{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface:   '#161b27',
+            surface2:  '#1e2536',
+            dim:       '#0f1117',
+            border:    '#2a3450',
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+    }
+    .card {
+      background: #161b27;
+      border: 1px solid #2a3450;
+      border-radius: 0.75rem;
+    }
+    .gain  { color: #22c55e; }
+    .loss  { color: #ef4444; }
+    .muted { color: #64748b; }
+    .badge-safe     { background: rgba(34,197,94,0.12);  color: #4ade80;  border: 1px solid rgba(34,197,94,0.3);  }
+    .badge-warning  { background: rgba(234,179,8,0.12);  color: #facc15;  border: 1px solid rgba(234,179,8,0.3);  }
+    .badge-critical { background: rgba(249,115,22,0.12); color: #fb923c;  border: 1px solid rgba(249,115,22,0.3); }
+    .badge-blocked  { background: rgba(239,68,68,0.12);  color: #f87171;  border: 1px solid rgba(239,68,68,0.3);  }
+    .nav-link {
+      color: #64748b;
+      font-size: 0.875rem;
+      padding-bottom: 2px;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover    { color: #e2e8f0; }
+    .nav-link.active   { color: #60a5fa; border-color: #60a5fa; }
+    /* Plotly modebar */
+    .js-plotly-plot .plotly .modebar { background: transparent !important; }
+    .modebar-btn svg { fill: #64748b !important; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Top navigation bar -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-[#161b27] border-b border-[#2a3450]">
+    <div class="max-w-7xl mx-auto px-6 flex items-center gap-8 h-14">
+
+      <a href="/" class="flex items-center gap-2 text-white font-semibold shrink-0">
+        <span class="text-base">🪙</span>
+        <span class="text-sm tracking-wide">CryptoAdvisor</span>
+      </a>
+
+      <div class="flex gap-6 items-center">
+        <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+          Dashboard
+        </a>
+        <a href="/recommendations"
+           class="nav-link {% if '/recommendations' in request.url.path %}active{% endif %} flex items-center gap-1">
+          Recomendações
+          {% if pending_count is defined and pending_count > 0 %}
+            <span class="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1
+                         text-[10px] bg-blue-600 text-white rounded-full">
+              {{ pending_count }}
+            </span>
+          {% endif %}
+        </a>
+        <a href="/tax" class="nav-link {% if '/tax' in request.url.path %}active{% endif %}">
+          Fiscal
+        </a>
+      </div>
+
+      <div class="ml-auto text-xs text-slate-500 hidden sm:block">
+        IN RFB 2.312/2026 · Apenas recomendações — sem execução automática
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <main class="pt-14">
+    <div class="max-w-7xl mx-auto px-6 py-6">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

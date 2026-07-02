@@ -1,0 +1,59 @@
+# ── Segredos ───────────────────────────────
+.env
+*.env
+!.env.example
+!*.env.example
+airflow.env
+
+# ── Python ─────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ── Node / Frontend ────────────────────────
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ── Bancos de dados / dados locais ─────────
+*.db
+*.sqlite
+*.sqlite3
+bandkit/bandkit-data/
+job_scout/job_scout.db
+
+# ── RAG / vetores / corpora grandes (regeneráveis) ──
+**/chroma_db/
+saggirag/data/
+*.duckdb
+*.parquet
+
+# ── SO / editores ──────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── Backups de histórico git (não versionar) ──
+_git_history_backup/
+
+# ── Artefatos de agente ────────────────────
+.claude/
+
+# Atalhos do Google Drive (contêm email/doc_id — inúteis como conteúdo)
+*.gdoc
+
+# Conteúdo raspado (não redistribuir — ver ficadica/docs/README.md)
+ficadica/data/
+# Artefatos de build do dbt
+**/dbt/target/

@@ -1,0 +1,7 @@
+musicdna:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /workspace/data/catalog.duckdb
+      threads: 1

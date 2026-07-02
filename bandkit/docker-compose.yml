@@ -1,0 +1,20 @@
+version: '3.9'
+
+services:
+  api:
+    build: ./backend
+    ports:
+      - '${API_PORT:-8000}:8000'
+    volumes:
+      - ./bandkit-data:/data
+    environment:
+      BANDKIT_DATA: /data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '${FRONTEND_PORT:-5173}:80'
+    depends_on:
+      - api
+    restart: unless-stopped

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Status Fiscal — CryptoAdvisor{% endblock %}
+
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-xl font-bold">Status Fiscal</h1>
+  <p class="text-sm muted mt-1">
+    Isenção de IR: até R$ 35.000/mês por exchange — IN RFB 2.312/2026
+  </p>
+</div>
+
+<!-- KPI cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  <div class="card p-5">
+    <p class="text-xs muted mb-2">Vendido este mês</p>
+    <p class="text-2xl font-bold">{{ tax_status.total_sold_brl | brl }}</p>
+  </div>
+
+  <div class="card p-5">
+    <p class="text-xs muted mb-2">Margem disponível</p>
+    <p class="text-2xl font-bold
+      {%- if tax_status.margin_available_brl > 10000 %} gain
+      {%- elif tax_status.margin_available_brl > 2000 %} text-yellow-400
+      {%- else %} loss{%- endif %}">
+      {{ tax_status.margin_available_brl | brl }}
+    </p>
+  </div>
+
+  <div class="card p-5 flex flex-col justify-between">
+    <p class="text-xs muted mb-2">Zona Fiscal</p>
+    <span class="inline-block px-4 py-2 rounded-full font-semibold text-sm self-start
+                 badge-{{ tax_status.zone }}">
+      {{ tax_status.zone | upper }}
+    </span>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="card p-5 mb-6">
+  {% set pct = tax_status.total_sold_brl / tax_status.limit_brl * 100 %}
+  <div class="flex items-center justify-between mb-2">
+    <p class="text-sm text-slate-300 font-medium">Uso do limite mensal</p>
+    <p class="text-sm font-semibold">{{ "%.1f" | format(pct) }}%</p>
+  </div>
+
+  <div class="relative w-full bg-dim rounded-full h-3 mb-1">
+    <!-- Zone markers -->
+    <div class="absolute top-0 bottom-0 w-px bg-yellow-500/50" style="left: 80%"></div>
+    <div class="absolute top-0 bottom-0 w-px bg-orange-500/50" style="left: 94.3%"></div>
+    <!-- Fill bar -->
+    <div class="h-3 rounded-full transition-all duration-500
+      {%- if tax_status.zone == 'safe' %} bg-green-500
+      {%- elif tax_status.zone == 'warning' %} bg-yellow-500
+      {%- elif tax_status.zone == 'critical' %} bg-orange-500
+      {%- else %} bg-red-500{%- endif %}"
+      style="width: {{ [pct, 100] | min }}%">
+    </div>
+  </div>
+
+  <div class="flex justify-between text-[10px] muted mt-2">
+    <span>R$ 0</span>
+    <span class="text-yellow-400/70">R$ 28k</span>
+    <span class="text-orange-400/70">R$ 33k</span>
+    <span class="text-red-400/70">R$ 35k (limite)</span>
+  </div>
+
+  <p class="text-sm text-slate-400 mt-3 leading-relaxed">{{ tax_status.instruction }}</p>
+
+  {% if tax_status.loss_harvest_candidates %}
+  <div class="mt-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20">
+    <span class="text-blue-400 text-xs shrink-0 mt-0.5">💡</span>
+    <p class="text-xs text-blue-200">
+      Candidatos a loss harvesting:
+      <span class="font-semibold">{{ tax_status.loss_harvest_candidates | join(', ') }}</span>
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 12-month history -->
+{% if history %}
+<div class="card overflow-hidden">
+  <div class="px-5 py-3 border-b border-[#2a3450]">
+    <h2 class="text-sm font-medium text-slate-300">Histórico — últimos 12 meses</h2>
+  </div>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-[#2a3450] text-xs text-slate-500 uppercase tracking-wide">
+        <th class="px-5 py-3 text-left">Período</th>
+        <th class="px-5 py-3 text-right">Vendido</th>
+        <th class="px-5 py-3 text-right">Ganho</th>
+        <th class="px-5 py-3 text-right">Perda</th>
+        <th class="px-5 py-3 text-center">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-[#2a3450]">
+      {% for row in history %}
+      <tr class="hover:bg-[#1e2536] transition-colors">
+        <td class="px-5 py-3 font-medium">
+          {{ "%04d-%02d" | format(row.year, row.month) }}
+        </td>
+        <td class="px-5 py-3 text-right">{{ row.total_sold_brl | brl }}</td>
+        <td class="px-5 py-3 text-right gain">{{ row.realized_gain_brl | brl }}</td>
+        <td class="px-5 py-3 text-right loss">{{ row.realized_loss_brl | brl }}</td>
+        <td class="px-5 py-3 text-center">
+          <span class="px-2 py-0.5 rounded-full text-xs badge-{{ row.tax_status }}">
+            {{ row.tax_status | upper }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card p-8 text-center">
+  <p class="muted">Nenhum registro fiscal ainda. Os dados aparecem após a primeira análise semanal.</p>
+</div>
+{% endif %}
+
+<p class="text-xs muted mt-6">
+  ⚠ Ferramenta auxiliar de planejamento tributário. Consulte um contador especializado
+  em criptoativos para a declaração de IR.
+</p>
+
+{% endblock %}

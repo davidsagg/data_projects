@@ -1,0 +1,37 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: velodna-dev
+    volumes:
+      - ..:/workspace:cached
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    command: sleep infinity
+
+  airflow:
+    image: apache/airflow:2.9.1
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+    ports:
+      - 8080:8080
+    command: bash -c "airflow db init && airflow webserver & airflow scheduler"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    volumes:
+      - mlflow-data:/mlflow
+    ports:
+      - 5001:5000
+    command: mlflow server --host 0.0.0.0 --port 5000
+
+volumes:
+  airflow-logs:
+  mlflow-data:

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="VeloDNA Test">
+  <trk><name>Test Route</name><trkseg>
+    <trkpt lat="-23.5505" lon="-46.6333"><ele>760</ele></trkpt>
+    <trkpt lat="-23.5510" lon="-46.6340"><ele>762</ele></trkpt>
+    <trkpt lat="-23.5515" lon="-46.6350"><ele>758</ele></trkpt>
+    <trkpt lat="-23.5520" lon="-46.6360"><ele>755</ele></trkpt>
+  </trkseg></trk>
+</gpx>

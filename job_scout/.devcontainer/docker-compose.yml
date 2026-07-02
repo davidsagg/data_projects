@@ -1,0 +1,21 @@
+services:
+
+  # ── Dev container (VS Code anexa aqui) ─────────────────
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    image: job-scout-dev
+    volumes:
+      - ..:/workspace:cached
+    environment:
+      PYTHONPATH: /workspace
+    env_file:
+      - ../.env
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    command: sleep infinity
+
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,13 @@
+bandkit-data/
+__pycache__/
+.venv/
+node_modules/
+dist/
+*.db
+.env
+.DS_Store
+bandkit-frontend-icon.png
+.claude/
+.coverage
+htmlcov/
+.pytest_cache/
