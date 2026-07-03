@@ -82,7 +82,7 @@ def get_jam_generator():
     return JamGenerator(
         output_dir="/workspace/data/sessions",
         ollama_base_url=os.getenv(
-            "OLLAMA_BASE_URL", "http://host.docker.internal:11434"
+            "OLLAMA_BASE_URL", "http://localhost:11434"
         ),
     )
 

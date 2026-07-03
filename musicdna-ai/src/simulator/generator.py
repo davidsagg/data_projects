@@ -28,7 +28,7 @@ class JamGenerator:
     def __init__(
         self,
         output_dir: str,
-        ollama_base_url: str = "http://host.docker.internal:11434",
+        ollama_base_url: str = "http://localhost:11434",
         model_name: str = "llama3",
     ) -> None:
         """Initialises the generator and ensures the output directory exists.

@@ -57,3 +57,7 @@ _git_history_backup/
 ficadica/data/
 # Artefatos de build do dbt
 **/dbt/target/
+
+# Rascunhos de artigo do Substack — só versionar após publicar
+**/substack_*.md
+**/docs/images/

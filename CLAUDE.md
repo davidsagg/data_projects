@@ -84,6 +84,52 @@ tabelas e diagramas ASCII — a conversão para markdown limpo é cara e precisa
 manual. Recomenda-se finalizar o lote restante via **rotina agendada** (uma leva de docs por
 execução, contexto novo a cada run) em vez de tudo numa única sessão.
 
+## Desenvolvimento local (sem DevContainer)
+
+A partir de 2026-07-03 o desenvolvimento é **local no macOS** (não mais em container por projeto),
+com o CLI rodando na raiz do monorepo (enxerga todos os projetos). Modelo **híbrido**: código
+Python roda local com **um venv por projeto**; Ollama é nativo e compartilhado; Airflow/MLflow
+continuam via Docker sob demanda.
+
+### Toolchain (instalar uma vez)
+- **uv** — gerência de Python e venvs: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Node 20+** (frontends): via `nvm`/`fnm`
+- **Ollama** (IA local, compartilhado): `brew install ollama` → `ollama pull llama3 mistral`
+- **Docker Desktop** — só para a infra pesada (Airflow/MLflow), sob demanda
+
+### Bootstrap
+`./setup_local.sh` cria os venvs (versão certa de Python), instala deps e prepara `.env`.
+Rode `./setup_local.sh <projeto>` para um só. Ativar: `source <projeto>/.venv/bin/activate`
+(bandkit usa `backend/.venv`). Versões: 3.12 em `crypto_advisor`/`ficadica`; 3.11 nos demais.
+
+### Ollama fora do container
+O código lê `OLLAMA_BASE_URL` (default `http://localhost:11434`). Nos `.env` locais, troque
+qualquer `host.docker.internal` por `localhost` (o `setup_local.sh` já faz isso ao criar o `.env`).
+
+### Mapa de portas (convenção — aplicar via `.env`/Makefile: `API_PORT`, `FRONTEND_PORT`)
+Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** também resolve.
+
+| Projeto | API | Front/UI | Streamlit | Infra (Docker, sob demanda) |
+|---|---|---|---|---|
+| bandkit | 8001 | 5174 | — | — |
+| crypto_advisor | — | — | 8501 | — |
+| ficadica | 8765 (dashboard) | — | — | — |
+| job_scout | — | — | — | — (só Telegram) |
+| musicdna-ai | 8003 | — | 8503 | Airflow 8080 · MLflow 5000 |
+| saggirag | 8004 | 5175 | — | — |
+| special_gear | — | — | — | — (só monitor) |
+| trend-radar | 8005 | — | 8505 | Airflow 8081 · MLflow 5001 |
+| velodna | 8006 | 5176 | — | Airflow 8082 · MLflow 5002 |
+| _(compartilhado)_ | | | | **Ollama 11434** |
+
+### Limpeza (status 2026-07-03)
+**Feito:** removidas as 8 `.devcontainer/`, o venv antigo do `saggirag`, o `rebuild_project.py`;
+Docker limpo (build cache + imagens dos devcontainers ≈ 36GB, volumes órfãos); defaults de Ollama
+→ `localhost` (código do `musicdna-ai` + `.env` de velodna/trend-radar).
+**Pendente:** atualizar os `CLAUDE.md` **por projeto** (ainda citam `/workspace`, `/app`,
+`host.docker.internal`); rework de dependências do `saggirag` (conflito LangChain — venv só com
+2 pacotes). cnpj-lookup (Docker) mantido por decisão.
+
 ## Pendências / decisões em aberto
 
 - ~~**Repos aninhados**~~ **RESOLVIDO (2026-07-02)**: migração para monorepo. Todos os `.git`

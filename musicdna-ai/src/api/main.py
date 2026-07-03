@@ -120,7 +120,7 @@ def get_engine():
         vector_store=vs,
         catalog_store=cat,
         ollama_base_url=os.getenv(
-            "OLLAMA_BASE_URL", "http://host.docker.internal:11434"
+            "OLLAMA_BASE_URL", "http://localhost:11434"
         ),
         model_name="llama3",
     )
@@ -203,7 +203,7 @@ def health() -> dict:
     Returns:
         Dict with ``status`` and ``ollama`` reachability.
     """
-    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     try:
         resp = requests.get(f"{ollama_url}/api/tags", timeout=3)
         ollama_status = "reachable" if resp.status_code == 200 else "unreachable"
