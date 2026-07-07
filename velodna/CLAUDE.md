@@ -8,12 +8,12 @@ Plataforma local de performance ciclística. Privacidade-first: dados de saúde 
 
 ## Ambiente
 
-- **Workspace no container:** `/workspace`
-- **Python:** 3.11 · venv em `/workspace/.venv`
+- **Diretório do projeto:** `velodna/` (dev local)
+- **Python:** 3.11 · venv em `.venv`
 - **Executar testes:** `.venv/bin/pytest tests/ -v`
 - **Linter/formatter:** `ruff check src/ tests/` e `ruff format src/ tests/`
 - **Banco de dados:** DuckDB — arquivo único em `data/velodna.duckdb` (ignorado pelo git)
-- **AI local:** Ollama em `http://host.docker.internal:11434` (llama3:latest, fallback mistral:latest)
+- **AI local:** Ollama em `http://localhost:11434` (llama3:latest, fallback mistral:latest)
 - **Variáveis de ambiente:** definidas em `.env` (não commitado) — ver `.env.example` se existir
 
 ### Iniciar serviços
@@ -25,8 +25,8 @@ uvicorn src.api.main:app --reload
 # Frontend React (porta 5173)
 cd frontend && npm run dev
 
-# Airflow + MLflow (via DevContainer docker-compose)
-docker compose -f .devcontainer/docker-compose.yml up airflow mlflow
+# Airflow + MLflow: o docker-compose ficava no .devcontainer (removido na migração local).
+# Recriar um docker-compose.yml no projeto se precisar orquestrar (não é necessário p/ o core).
 ```
 
 ---
@@ -205,7 +205,7 @@ Tabelas principais — ver `docs/schema.sql` e `src/storage/catalog_store.py` pa
 - **CatalogStore autoritativo:** `src/storage/catalog_store.py` — nunca usar o duplicado em `src/ingestion/catalog_store.py` (artefato de fase anterior; mantido por compatibilidade com testes de ingestão)
 - **Airflow 3.x:** usar `schedule=` (não `schedule_interval=`) e `airflow.providers.standard.operators.python.PythonOperator`
 - **MLflow FutureWarning:** backend `FileStore` foi depreciado em fev/2026 — não afeta funcionamento, mas migrar para SQLite em produção
-- Arquivos `.fit` e `.gpx` ficam em `data/fit/` e `data/gpx/` (bind mount no DevContainer)
+- Arquivos `.fit` e `.gpx` ficam em `data/fit/` e `data/gpx/`
 - O banco `velodna.duckdb` fica em `data/` — nunca commitado
 - **RouteMap:** usa `GET /activities/{id}/streams?every_n=6` — streams decimados para performance no mapa
 - **ZoneChart:** usa `GET /activities/{id}/zones` — FTP buscado de `athlete_metrics` (mais recente com `ftp_w IS NOT NULL`)

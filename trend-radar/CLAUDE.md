@@ -6,12 +6,12 @@ Plataforma de inteligência de tendências do mercado musical brasileiro. Pipeli
 
 ## Ambiente
 
-- **Workspace no container:** `/app`
-- **DuckDB:** `/workspace/data/trend_radar.duckdb`
+- **Diretório do projeto:** `trend-radar/` (dev local; venv em `.venv`)
+- **DuckDB:** `data/trend_radar.duckdb`
 - **Executar testes:** `pytest tests/ -v` ou `make test`
 - **Cobertura:** `pytest --cov=src --cov-report=term-missing -v` ou `make coverage`
 - **Linter/formatter:** não configurado (sem ruff/black explícito — verificar antes de formatar)
-- **AI local:** Ollama em `http://host.docker.internal:11434` (llama3:8b)
+- **AI local:** Ollama em `http://localhost:11434` (llama3:8b)
 - **Variáveis de ambiente:** `.env` — ver `.env.example` para referência
 - **Iniciar serviços:** `make up` (Docker Compose com 6 serviços)
 - **Demo com dados sintéticos:** `make demo`

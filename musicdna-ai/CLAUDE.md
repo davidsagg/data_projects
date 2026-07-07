@@ -6,13 +6,13 @@ Sistema de análise de áudio com embeddings, matching de licenciamento e simula
 
 ## Ambiente
 
-- **Workspace no container:** `/workspace`
+- **Diretório do projeto:** `musicdna-ai/` (dev local; venv em `.venv`)
 - **Python:** 3.11
 - **Executar testes (sem integração):** `make test` ou `pytest tests/ -v --tb=short`
 - **Executar TODOS os testes (incluindo Ollama):** `make test-all`
 - **Cobertura:** `make coverage` (HTML em `htmlcov/index.html`)
 - **Linter/formatter:** `black` — `make lint` (check) e `make format` (aplicar)
-- **AI local:** Ollama em `http://host.docker.internal:11434` (geração de estilos/progressões)
+- **AI local:** Ollama em `http://localhost:11434` (geração de estilos/progressões)
 - **MLflow UI:** `make mlflow` → http://localhost:5000
 - **API:** `make api` → http://localhost:8000
 - **UI Streamlit:** `make ui` → http://localhost:8502

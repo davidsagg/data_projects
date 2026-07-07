@@ -36,8 +36,6 @@ ficadica/
 ├── run_parser.py                    ← entry point: normaliza → JSON/CSV/Markdown
 ├── run_planner.py                   ← entry point: gera plano de estudos
 ├── start_dashboard.sh               ← inicia servidor em http://localhost:8766
-├── .devcontainer/
-│   └── devcontainer.json
 ├── scraper/
 │   ├── auth.py                      ← login WordPress + gerenciamento de sessão
 │   ├── config.py                    ← configuração via .env

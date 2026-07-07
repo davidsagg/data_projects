@@ -126,8 +126,8 @@ Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** 
 **Feito:** removidas as 8 `.devcontainer/`, o venv antigo do `saggirag`, o `rebuild_project.py`;
 Docker limpo (build cache + imagens dos devcontainers ≈ 36GB, volumes órfãos); defaults de Ollama
 → `localhost` (código do `musicdna-ai` + `.env` de velodna/trend-radar).
-**Pendente:** atualizar os `CLAUDE.md` **por projeto** (ainda citam `/workspace`, `/app`,
-`host.docker.internal`). cnpj-lookup (Docker) mantido por decisão.
+**CLAUDE.md por projeto:** atualizados para o modo local (2026-07-03) — sem `/workspace`, `/app`
+ou `host.docker.internal`. cnpj-lookup (Docker) mantido por decisão.
 **saggirag:** deps refeitas (LangChain 0.3.x coerente + `pypdf`/`psycopg2-binary`; `openpyxl`
 corrigido) e README atualizado — validado via dry-run; falta rodar `./setup_local.sh saggirag`.
 
@@ -137,7 +137,8 @@ corrigido) e README atualizado — validado via dry-run; falta rodar `./setup_lo
   internos foram removidos (backups em `_git_history_backup/`) e a raiz virou repo único
   apontando para `davidsagg/data_projects`. Reorganização física das pastas (aninhar tudo sob
   uma `data_projects/`) ficou para depois, por decisão do Dave.
-- **Mapeamento `job_scout` ↔ `upwork-jobs`**: confirmar se é o mesmo projeto (Freelancer vs Upwork).
+- ~~**Mapeamento `job_scout` ↔ `upwork-jobs`**~~ **RESOLVIDO**: é o mesmo projeto — começou como
+  "upwork-jobs" (Drive) e virou `job_scout` (Freelancer.com) depois.
 - Projetos sem `.git`: `ficadica`, `Preditiva`, `saggirag`, `special_gear` — inicializar quando publicar.
 - Projetos sem pasta no Drive: `crypto_advisor`, `Preditiva`, `saggirag`, `special_gear`,
   `work_in_progress` — criar quando houver documentação narrativa.
