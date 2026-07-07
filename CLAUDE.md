@@ -127,8 +127,9 @@ Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** 
 Docker limpo (build cache + imagens dos devcontainers ≈ 36GB, volumes órfãos); defaults de Ollama
 → `localhost` (código do `musicdna-ai` + `.env` de velodna/trend-radar).
 **Pendente:** atualizar os `CLAUDE.md` **por projeto** (ainda citam `/workspace`, `/app`,
-`host.docker.internal`); rework de dependências do `saggirag` (conflito LangChain — venv só com
-2 pacotes). cnpj-lookup (Docker) mantido por decisão.
+`host.docker.internal`). cnpj-lookup (Docker) mantido por decisão.
+**saggirag:** deps refeitas (LangChain 0.3.x coerente + `pypdf`/`psycopg2-binary`; `openpyxl`
+corrigido) e README atualizado — validado via dry-run; falta rodar `./setup_local.sh saggirag`.
 
 ## Pendências / decisões em aberto
 

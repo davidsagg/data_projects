@@ -1,69 +1,67 @@
 # RAG Finance Chat
 
-Sistema de Chat com RAG (Retrieval Augmented Generation) usando Mistral 7B.
+Sistema de chat com **RAG** (Retrieval Augmented Generation) sobre documentos de finanças,
+usando **Mistral 7B** local (via Ollama), **Chroma** como vector store e **PostgreSQL** no backend.
+100% local — nada é enviado para serviços externos.
+
+> **Nota (reprodutibilidade):** a pasta `data/` (seus documentos + o índice Chroma) **não vem no
+> repositório** — é grande e específica de cada usuário. Para usar: coloque seus arquivos em
+> `data/documents/` e rode `python reindex_rag.py` para (re)construir o índice.
+
+## Pré-requisitos
+
+- **Python 3.11** e **Node 20+**
+- **Ollama** com o modelo Mistral: `ollama pull mistral` (e o servidor rodando: `ollama serve`)
+- **PostgreSQL** acessível (padrão do backend: `127.0.0.1:5433` — ajuste via `.env`)
 
 ## Setup
 
-### 1. Instalar dependências
+No monorepo, o `setup_local.sh` já cria o venv e instala as dependências. Manualmente:
 
-\`\`\`bash
-cd ~/rag-finance-app
-python3 -m venv venv
-source venv/bin/activate
+```bash
+# a partir de saggirag/
+python3.11 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-\`\`\`
+cp .env.example .env   # se existir; ajuste OLLAMA_BASE_URL, credenciais do Postgres, etc.
+```
 
-### 2. Instalar Ollama
+## Rodar
 
-- Download: https://ollama.ai
-- Pull model: `ollama pull mistral`
-- Rodar: `ollama serve`
-
-### 3. Rodar Backend
-
-\`\`\`bash
-cd ~/rag-finance-app
-source venv/bin/activate
+**Backend (FastAPI, porta 8000):**
+```bash
+source .venv/bin/activate
 uvicorn backend.main:app --host localhost --port 8000 --reload
-\`\`\`
+```
 
-### 4. Rodar Frontend
-
-\`\`\`bash
-cd ~/rag-finance-app/frontend
+**Frontend (React + Vite):**
+```bash
+cd frontend
 npm install
-npm start
-\`\`\`
+npm run dev
+```
 
-## Scripts Úteis
+## Adicionar documentos
 
-### Reindexar Documentos
-
-\`\`\`bash
-python3 reindex_rag.py
-\`\`\`
-
-### Converter Excel para Markdown
-
-\`\`\`bash
-python3 excel_to_markdown.py seu_arquivo.xlsx
-\`\`\`
-
-## Adicionar Documentos
-
-1. Coloque arquivos .txt, .pdf, .docx em `data/documents/`
-2. Execute `python3 reindex_rag.py`
+1. Coloque arquivos `.txt` ou `.pdf` em `data/documents/`
+2. Rode `python reindex_rag.py` para reindexar
 3. Reinicie o backend
+
+`convert_pdfs.py` ajuda a preparar/converter PDFs antes da indexação.
 
 ## Estrutura
 
-\`\`\`
-rag-finance-app/
-├── backend/          # FastAPI backend
-├── frontend/         # React frontend
-├── data/
-│   ├── documents/    # Seus documentos
-│   └── chroma_db/    # Vector store
-├── .env              # Configurações
-└── requirements.txt  # Dependências Python
-\`\`\`
+```
+saggirag/
+├── backend/          # FastAPI (main.py) — RAG + endpoints de chat
+├── frontend/         # React + Vite
+├── convert_pdfs.py   # utilitário de preparação de PDFs
+├── reindex_rag.py    # (re)constrói o índice Chroma a partir de data/documents/
+├── data/             # documentos + chroma_db (NÃO versionado)
+├── .env              # configurações (não versionado)
+└── requirements.txt
+```
+
+## Stack
+
+Python 3.11 · FastAPI · LangChain (community / ollama / text-splitters) · Chroma · Ollama (Mistral 7B) · PostgreSQL · React + Vite

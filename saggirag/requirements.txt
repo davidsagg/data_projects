@@ -1,11 +1,16 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-python-dotenv==1.0.0
-pydantic==2.5.0
-langchain==0.1.0
-langchain-core==0.1.0
-langchain-community==0.0.13
-langchain-ollama==0.1.0
-langchain-chroma==0.1.2
-chromadb==0.4.17
-openpyxl==3.11.0
+# API
+fastapi>=0.104
+uvicorn>=0.24
+python-dotenv>=1.0
+pydantic>=2.5
+
+# RAG (LangChain — pacotes "split" da era 0.2+, coerentes entre si)
+langchain-community>=0.2,<0.4
+langchain-ollama>=0.1,<0.3
+langchain-text-splitters>=0.2,<0.4
+chromadb>=0.4.17
+pypdf>=4.0            # necessário para PyPDFLoader
+
+# Persistência / utilidades
+psycopg2-binary>=2.9  # cliente PostgreSQL (backend)
+openpyxl>=3.1
