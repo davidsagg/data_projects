@@ -37,6 +37,7 @@ Para **cada projeto** o ciclo de vida é:
 | `job_scout` | Monitor de vagas (Freelancer.com via RSS) com scoring Claude + Telegram | ✅ | ✅ | ✅ | ❌ | `upwork-jobs` (2 docs) |
 | `musicdna-ai` | Análise de áudio com embeddings, licenciamento e jam sessions (7 fases, TDD) | — | ✅ | ✅ | ❌ | `MusicDNA` (9 .docx) |
 | `Preditiva` | Cases de ML/estatística (Diabetes, Turnover RH, VaR) em notebooks | — | — | ❌ | ❌ | — |
+| `saggicrm` | CRM pessoal local p/ contatos do LinkedIn (grupos, mapa, follow-ups) | — | ✅ | ✅ | ❌ | — |
 | `saggirag` | Chat com RAG sobre finanças usando Mistral 7B | ✅ | — | ❌ | ❌ | — |
 | `special_gear` | Monitor de leilões da Receita Federal p/ instrumentos/áudio | ✅ | — | ❌ | ❌ | — |
 | `trend-radar` | Plataforma de tendências do mercado musical BR (Airflow, dbt/DuckDB, ML, LLM) | ✅ | ✅ | ✅ | ❌ | `TrendRadar` (8 docs) |
@@ -111,16 +112,22 @@ Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** 
 
 | Projeto | API | Front/UI | Streamlit | Infra (Docker, sob demanda) |
 |---|---|---|---|---|
-| bandkit | 8001 | 5174 | — | — |
+| bandkit | 8000 | 5173 | — | — |
 | crypto_advisor | — | — | 8501 | — |
 | ficadica | 8765 (dashboard) | — | — | — |
 | job_scout | — | — | — | — (só Telegram) |
 | musicdna-ai | 8003 | — | 8503 | Airflow 8080 · MLflow 5000 |
+| saggicrm | 8007 | 5177 | — | — |
 | saggirag | 8004 | 5175 | — | — |
 | special_gear | — | — | — | — (só monitor) |
 | trend-radar | 8005 | — | 8505 | Airflow 8081 · MLflow 5001 |
 | velodna | 8006 | 5176 | — | Airflow 8082 · MLflow 5002 |
 | _(compartilhado)_ | | | | **Ollama 11434** |
+
+**Nota (bandkit):** portas reais são as defaults do FastAPI/Vite (8000/5173), hardcoded em
+`bandkit/.env` (`API_PORT=8000`) e no proxy `/api` de `bandkit/frontend/vite.config.ts` — não
+8001/5174 como a convenção original previa. Se rodar bandkit junto com outro projeto que também
+use 8000/5173, mude `.env` **e** `vite.config.ts` (proxy) juntos, ou rode um projeto por vez.
 
 ### Limpeza (status 2026-07-03)
 **Feito:** removidas as 8 `.devcontainer/`, o venv antigo do `saggirag`, o `rebuild_project.py`;

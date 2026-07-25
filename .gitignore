@@ -58,6 +58,10 @@ ficadica/data/
 # Artefatos de build do dbt
 **/dbt/target/
 
+# SaggiCRM: dados pessoais de contatos (export do LinkedIn de terceiros — nunca versionar)
+saggicrm/Basic_LinkedInDataExport_*.zip/
+saggicrm/data/
+
 # Rascunhos de artigo do Substack — só versionar após publicar
 **/substack_*.md
 **/docs/images/

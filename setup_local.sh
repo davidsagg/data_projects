@@ -35,6 +35,7 @@ PROJECTS=(
   "ficadica|3.12|req|requirements.txt|.venv|-"
   "job_scout|3.11|req|requirements.txt|.venv|-"
   "musicdna-ai|3.11|req|requirements.txt|.venv|-"
+  "saggicrm|3.11|req|backend/requirements.txt|backend/.venv|-"
   "saggirag|3.11|req|requirements.txt|.venv|-"
   "special_gear|3.11|req|requirements.txt|.venv|-"
   "trend-radar|3.11|req|requirements.txt|.venv|-"
@@ -92,7 +93,7 @@ done
 
 # ── Frontends (Node) ────────────────────────────────────────────────
 if command -v npm >/dev/null 2>&1; then
-  for fe in bandkit/frontend saggirag/frontend velodna/frontend; do
+  for fe in bandkit/frontend saggicrm/frontend saggirag/frontend velodna/frontend; do
     if [ -d "$ROOT/$fe" ] && { [ "${#SELECTED[@]}" -eq 0 ] || printf '%s\n' "${SELECTED[@]}" | grep -q "^${fe%%/*}$"; }; then
       echo ""
       echo "──────── $fe (npm install) ────────"
