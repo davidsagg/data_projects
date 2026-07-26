@@ -19,11 +19,12 @@ def test_create_and_get_contact(client):
     assert response.json()["first_name"] == "Jane"
 
 
-def test_list_contacts_filters_by_company(client):
+def test_list_contacts_filters_by_company_id(client):
     _create_contact(client, first_name="Jane", company="Acme")
     _create_contact(client, first_name="Bob", company="Globex")
 
-    response = client.get("/api/contacts", params={"company": "Acme"})
+    companies = {c["name"]: c["id"] for c in client.get("/api/companies").json()}
+    response = client.get("/api/contacts", params={"company_id": companies["Acme"]})
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["first_name"] == "Jane"
@@ -66,6 +67,28 @@ def test_last_contacted_at_reflects_latest_interaction(client):
     response = client.get("/api/contacts", params={"q": "jane"})
     item = response.json()["items"][0]
     assert item["last_contacted_at"].startswith("2026-06-01")
+
+
+def test_add_linkedin_url_to_contact_missing_one(client):
+    created = _create_contact(client, linkedin_url=None)
+    response = client.put(
+        f"/api/contacts/{created['id']}", json={"linkedin_url": "https://www.linkedin.com/in/janedoe"}
+    )
+    assert response.status_code == 200
+    assert response.json()["linkedin_url"] == "https://www.linkedin.com/in/janedoe"
+
+
+def test_update_with_duplicate_linkedin_url_returns_conflict_not_500(client):
+    _create_contact(client, first_name="Jane", linkedin_url="https://www.linkedin.com/in/shared")
+    bob = _create_contact(client, first_name="Bob", linkedin_url=None)
+
+    response = client.put(
+        f"/api/contacts/{bob['id']}", json={"linkedin_url": "https://www.linkedin.com/in/shared"}
+    )
+    assert response.status_code == 409
+
+    # the contact must remain unchanged after the rollback
+    assert client.get(f"/api/contacts/{bob['id']}").json()["linkedin_url"] is None
 
 
 def test_group_assignment_and_filter(client):

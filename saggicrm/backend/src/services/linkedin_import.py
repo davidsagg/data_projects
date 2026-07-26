@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from src.models.models import Contact, ContactSource
 from src.models.schemas import ImportSummary
+from src.services.companies import get_or_create_company
+from src.services.seniority import classify_seniority
 
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -82,8 +84,13 @@ def import_linkedin_csv(db: Session, file_content: bytes) -> ImportSummary:
             existing.connected_on = connected_on or existing.connected_on
             if not existing.linkedin_url and linkedin_url:
                 existing.linkedin_url = linkedin_url
+            existing.company_id = (
+                get_or_create_company(db, existing.company).id if existing.company else None
+            )
+            existing.seniority = classify_seniority(existing.position)
             updated += 1
         else:
+            company_id = get_or_create_company(db, company).id if company else None
             db.add(
                 Contact(
                     first_name=first_name,
@@ -91,7 +98,9 @@ def import_linkedin_csv(db: Session, file_content: bytes) -> ImportSummary:
                     linkedin_url=linkedin_url,
                     email=email,
                     company=company,
+                    company_id=company_id,
                     position=position,
+                    seniority=classify_seniority(position),
                     connected_on=connected_on,
                     source=ContactSource.linkedin_import,
                 )

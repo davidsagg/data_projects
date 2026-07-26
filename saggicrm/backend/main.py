@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api import contacts, geocode, groups, importer, interactions, reminders, stats
+from src.api import companies, contacts, geocode, groups, importer, interactions, reminders, stats
 
 app = FastAPI(title="SaggiCRM API")
 
@@ -13,6 +13,7 @@ app.add_middleware(
 )
 
 app.include_router(contacts.router)
+app.include_router(companies.router)
 app.include_router(groups.router)
 app.include_router(interactions.router)
 app.include_router(reminders.router)

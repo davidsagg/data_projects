@@ -1,12 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, X, Star } from 'lucide-react'
 import clsx from 'clsx'
-import { contactsApi, groupsApi } from '../api/client'
-import type { ContactListItem, FacetItem, Group } from '../types'
+import { companiesApi, contactsApi, groupsApi } from '../api/client'
+import type { Company, ContactListItem, FacetItem, Group } from '../types'
 import { useFiltersStore } from '../store/filters'
 import { Avatar } from '../components/Avatar'
 import { GroupChip } from '../components/GroupChip'
+import { FavoriteStar } from '../components/FavoriteStar'
+import { SortableTh } from '../components/SortableTh'
+import { SECTORS } from '../lib/sectors'
+import { SENIORITY_LEVELS } from '../lib/seniority'
 
 const PAGE_SIZE = 50
 
@@ -20,14 +24,14 @@ export function ContactsListPage() {
   const [contacts, setContacts] = useState<ContactListItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [companies, setCompanies] = useState<FacetItem[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [cities, setCities] = useState<FacetItem[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [assignGroupId, setAssignGroupId] = useState('')
 
   useEffect(() => {
-    contactsApi.companies().then(setCompanies)
+    companiesApi.list().then(setCompanies)
     contactsApi.locations().then(setCities)
     groupsApi.list().then(setGroups)
   }, [])
@@ -38,9 +42,13 @@ export function ContactsListPage() {
       .list({
         q: filters.q || undefined,
         group_id: filters.groupId || undefined,
-        company: filters.company || undefined,
+        company_id: filters.companyId || undefined,
+        sector: filters.sector || undefined,
+        seniority: filters.seniority || undefined,
         city: filters.city || undefined,
+        favorite_only: filters.favoriteOnly || undefined,
         sort: filters.sort,
+        sort_dir: filters.sortDir,
         page: filters.page,
         page_size: PAGE_SIZE,
       })
@@ -49,7 +57,18 @@ export function ContactsListPage() {
         setTotal(res.total)
         setLoading(false)
       })
-  }, [filters.q, filters.groupId, filters.company, filters.city, filters.sort, filters.page])
+  }, [
+    filters.q,
+    filters.groupId,
+    filters.companyId,
+    filters.sector,
+    filters.seniority,
+    filters.city,
+    filters.favoriteOnly,
+    filters.sort,
+    filters.sortDir,
+    filters.page,
+  ])
 
   useEffect(() => {
     load()
@@ -81,6 +100,11 @@ export function ContactsListPage() {
     load()
   }
 
+  async function toggleFavorite(id: number) {
+    setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, is_favorite: !c.is_favorite } : c)))
+    await contactsApi.toggleFavorite(id)
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-8">
       <div className="flex items-center justify-between">
@@ -108,14 +132,38 @@ export function ContactsListPage() {
           />
         </div>
         <select
-          value={filters.company || ''}
-          onChange={(e) => filters.setCompany(e.target.value || null)}
+          value={filters.companyId ?? ''}
+          onChange={(e) => filters.setCompanyId(e.target.value ? Number(e.target.value) : null)}
           className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
         >
           <option value="">Todas as empresas</option>
           {companies.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.value} ({c.count})
+            <option key={c.id} value={c.id}>
+              {c.name} ({c.contact_count})
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.sector ?? ''}
+          onChange={(e) => filters.setSector(e.target.value || null)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+        >
+          <option value="">Todos os setores</option>
+          {SECTORS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.seniority ?? ''}
+          onChange={(e) => filters.setSeniority(e.target.value || null)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+        >
+          <option value="">Toda senioridade</option>
+          {SENIORITY_LEVELS.map((s) => (
+            <option key={s} value={s}>
+              {s}
             </option>
           ))}
         </select>
@@ -131,16 +179,18 @@ export function ContactsListPage() {
             </option>
           ))}
         </select>
-        <select
-          value={filters.sort}
-          onChange={(e) => filters.setSort(e.target.value as typeof filters.sort)}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+        <button
+          onClick={() => filters.setFavoriteOnly(!filters.favoriteOnly)}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium',
+            filters.favoriteOnly
+              ? 'border-amber-300 bg-amber-50 text-amber-600'
+              : 'border-border bg-surface text-muted hover:text-text',
+          )}
         >
-          <option value="name">Nome</option>
-          <option value="company">Empresa</option>
-          <option value="connected_on">Data de conexão</option>
-          <option value="recent">Adicionado recentemente</option>
-        </select>
+          <Star size={14} fill={filters.favoriteOnly ? 'currentColor' : 'none'} />
+          Favoritos
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -206,9 +256,11 @@ export function ContactsListPage() {
               <th className="w-10 px-4 py-3">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} />
               </th>
-              <th className="px-2 py-3">Nome</th>
-              <th className="px-2 py-3">Empresa</th>
+              <th className="w-8 px-2 py-3"></th>
+              <SortableTh field="name" label="Nome" activeField={filters.sort} direction={filters.sortDir} onSort={filters.toggleSort} />
+              <SortableTh field="company" label="Empresa" activeField={filters.sort} direction={filters.sortDir} onSort={filters.toggleSort} />
               <th className="px-2 py-3">Cargo</th>
+              <SortableTh field="seniority" label="Senioridade" activeField={filters.sort} direction={filters.sortDir} onSort={filters.toggleSort} />
               <th className="px-2 py-3">Cidade</th>
               <th className="px-2 py-3">Grupos</th>
               <th className="px-2 py-3">Último contato</th>
@@ -226,6 +278,9 @@ export function ContactsListPage() {
                   />
                 </td>
                 <td className="px-2 py-3">
+                  <FavoriteStar isFavorite={c.is_favorite} onToggle={() => toggleFavorite(c.id)} size={16} />
+                </td>
+                <td className="px-2 py-3">
                   <Link to={`/contacts/${c.id}`} className="flex items-center gap-3">
                     <Avatar firstName={c.first_name} lastName={c.last_name} size={32} />
                     <span className="font-medium text-text">
@@ -235,6 +290,7 @@ export function ContactsListPage() {
                 </td>
                 <td className="px-2 py-3 text-muted">{c.company || '—'}</td>
                 <td className="px-2 py-3 text-muted">{c.position || '—'}</td>
+                <td className="px-2 py-3 text-muted">{c.seniority || '—'}</td>
                 <td className="px-2 py-3 text-muted">{c.city || '—'}</td>
                 <td className="px-2 py-3">
                   <div className="flex flex-wrap gap-1">
@@ -248,7 +304,7 @@ export function ContactsListPage() {
             ))}
             {!loading && contacts.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted">
+                <td colSpan={9} className="px-4 py-10 text-center text-muted">
                   Nenhum contato encontrado com esses filtros.
                 </td>
               </tr>

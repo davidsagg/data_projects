@@ -1,6 +1,8 @@
 import axios from 'axios'
 import type {
   BulkGeocodeResult,
+  Company,
+  CompanyDetail,
   ContactDetail,
   ContactPage,
   FacetItem,
@@ -17,10 +19,14 @@ const http = axios.create({ baseURL: '' })
 export interface ContactFilters {
   q?: string
   group_id?: number
-  company?: string
+  company_id?: number
+  sector?: string
+  seniority?: string
   position?: string
   city?: string
-  sort?: 'name' | 'company' | 'connected_on' | 'recent'
+  favorite_only?: boolean
+  sort?: 'name' | 'company' | 'seniority' | 'connected_on' | 'recent'
+  sort_dir?: 'asc' | 'desc'
   page?: number
   page_size?: number
 }
@@ -34,8 +40,26 @@ export const contactsApi = {
   update: (id: number, payload: Partial<ContactDetail>) =>
     http.put<ContactDetail>(`/api/contacts/${id}`, payload).then((r) => r.data),
   remove: (id: number) => http.delete(`/api/contacts/${id}`),
-  companies: () => http.get<FacetItem[]>('/api/companies').then((r) => r.data),
+  toggleFavorite: (id: number) =>
+    http.patch<ContactDetail>(`/api/contacts/${id}/favorite`).then((r) => r.data),
   locations: () => http.get<FacetItem[]>('/api/locations').then((r) => r.data),
+  seniorityLevels: () => http.get<FacetItem[]>('/api/seniority-levels').then((r) => r.data),
+}
+
+export const companiesApi = {
+  list: (
+    filters: {
+      sector?: string
+      q?: string
+      sort?: 'contacts' | 'name' | 'sector'
+      sort_dir?: 'asc' | 'desc'
+    } = {},
+  ) => http.get<Company[]>('/api/companies', { params: filters }).then((r) => r.data),
+  get: (id: number) => http.get<CompanyDetail>(`/api/companies/${id}`).then((r) => r.data),
+  update: (id: number, payload: Partial<{ name: string; sector: string }>) =>
+    http.patch<Company>(`/api/companies/${id}`, payload).then((r) => r.data),
+  bulkSector: (companyIds: number[], sector: string) =>
+    http.post('/api/companies/bulk-sector', { company_ids: companyIds, sector }),
 }
 
 export const groupsApi = {

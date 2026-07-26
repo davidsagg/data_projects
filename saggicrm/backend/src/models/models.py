@@ -50,7 +50,11 @@ class Contact(Base):
     linkedin_url: Mapped[str | None] = mapped_column(String(500), unique=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(300), nullable=True)
     company: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    company_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
+    )
     position: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    seniority: Mapped[str | None] = mapped_column(String(50), nullable=True)
     connected_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     city: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -58,6 +62,7 @@ class Contact(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[ContactSource] = mapped_column(
         Enum(ContactSource), default=ContactSource.manual
     )
@@ -75,10 +80,24 @@ class Contact(Base):
     reminders: Mapped[list["Reminder"]] = relationship(
         back_populates="contact", cascade="all, delete-orphan", order_by="Reminder.due_date"
     )
+    company_ref: Mapped["Company | None"] = relationship(back_populates="contacts")
 
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}".strip()
+
+
+class Company(Base):
+    __tablename__ = "companies"
+    __table_args__ = (UniqueConstraint("normalized_name", name="uq_company_normalized_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(300))
+    normalized_name: Mapped[str] = mapped_column(String(300))
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    contacts: Mapped[list["Contact"]] = relationship(back_populates="company_ref")
 
 
 class Group(Base):

@@ -34,7 +34,11 @@ export interface ContactListItem {
   linkedin_url: string | null
   email: string | null
   company: string | null
+  company_id: number | null
+  sector: string | null
   position: string | null
+  seniority: string | null
+  is_favorite: boolean
   connected_on: string | null
   city: string | null
   country: string | null
@@ -67,17 +71,34 @@ export interface ImportSummary {
 export interface FacetItem {
   value: string
   count: number
+  id: number | null
 }
 
 export interface StatsOut {
   total_contacts: number
   total_groups: number
   contacts_missing_city: number
+  total_favorites: number
   top_companies: FacetItem[]
   contacts_by_group: FacetItem[]
   connections_by_year: FacetItem[]
+  top_sectors: FacetItem[]
+  seniority_breakdown: FacetItem[]
   upcoming_reminders: Reminder[]
   recent_contacts: ContactListItem[]
+  favorite_contacts: ContactListItem[]
+}
+
+export interface Company {
+  id: number
+  name: string
+  sector: string | null
+  contact_count: number
+}
+
+export interface CompanyDetail extends Company {
+  seniority_breakdown: FacetItem[]
+  contacts: ContactListItem[]
 }
 
 export interface GeocodeResult {

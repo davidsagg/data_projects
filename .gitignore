@@ -59,7 +59,9 @@ ficadica/data/
 **/dbt/target/
 
 # SaggiCRM: dados pessoais de contatos (export do LinkedIn de terceiros — nunca versionar)
-saggicrm/Basic_LinkedInDataExport_*.zip/
+# Padrões **/ para sobreviver a reorganizações de pasta (ex.: exports movidos para subpastas)
+saggicrm/**/*LinkedInDataExport*/
+saggicrm/Files/
 saggicrm/data/
 
 # Rascunhos de artigo do Substack — só versionar após publicar

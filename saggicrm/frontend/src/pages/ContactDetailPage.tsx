@@ -7,6 +7,7 @@ import { Avatar } from '../components/Avatar'
 import { Card } from '../components/Card'
 import { EditableField } from '../components/EditableField'
 import { GroupChip } from '../components/GroupChip'
+import { FavoriteStar } from '../components/FavoriteStar'
 import { formatDateOnly } from '../lib/date'
 
 const INTERACTION_LABELS: Record<InteractionType, string> = {
@@ -110,6 +111,11 @@ export function ContactDetailPage() {
     load()
   }
 
+  async function toggleFavorite() {
+    await contactsApi.toggleFavorite(contactId)
+    load()
+  }
+
   async function deleteContact() {
     if (!contact) return
     if (!confirm(`Remover ${contact.first_name} ${contact.last_name} do CRM?`)) return
@@ -128,12 +134,35 @@ export function ContactDetailPage() {
       <div className="flex items-center gap-4">
         <Avatar firstName={contact.first_name} lastName={contact.last_name} size={64} />
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-text">
-            {contact.first_name} {contact.last_name}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-text">
+              {contact.first_name} {contact.last_name}
+            </h1>
+            <FavoriteStar isFavorite={contact.is_favorite} onToggle={toggleFavorite} size={20} />
+          </div>
           <p className="text-sm text-muted">
-            {contact.position || 'Sem cargo'} {contact.company && `· ${contact.company}`}
+            {contact.position || 'Sem cargo'}{' '}
+            {contact.company_id && contact.company ? (
+              <Link to={`/companies/${contact.company_id}`} className="text-accent hover:underline">
+                · {contact.company}
+              </Link>
+            ) : (
+              contact.company && `· ${contact.company}`
+            )}
           </p>
+          <div className="mt-1 flex gap-2 text-xs text-muted">
+            {contact.seniority && (
+              <span className="rounded-full bg-accent-soft px-2 py-0.5 text-accent">{contact.seniority}</span>
+            )}
+            {contact.sector && (
+              <Link
+                to={`/companies?sector=${encodeURIComponent(contact.sector)}`}
+                className="rounded-full bg-canvas px-2 py-0.5 hover:bg-accent-soft hover:text-accent"
+              >
+                {contact.sector}
+              </Link>
+            )}
+          </div>
         </div>
         {contact.linkedin_url && (
           <a
@@ -197,6 +226,14 @@ export function ContactDetailPage() {
             )}
           </div>
           <EditableField label="" value={contact.city || ''} placeholder="Não informado" onSave={(v) => updateField('city', v)} />
+        </div>
+        <div className="col-span-2">
+          <EditableField
+            label="URL do LinkedIn"
+            value={contact.linkedin_url || ''}
+            placeholder="https://www.linkedin.com/in/..."
+            onSave={(v) => updateField('linkedin_url', v)}
+          />
         </div>
       </Card>
 

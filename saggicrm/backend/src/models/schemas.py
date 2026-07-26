@@ -80,7 +80,7 @@ class ContactBase(BaseModel):
 
 
 class ContactCreate(ContactBase):
-    pass
+    is_favorite: bool = False
 
 
 class ContactUpdate(BaseModel):
@@ -95,11 +95,16 @@ class ContactUpdate(BaseModel):
     country: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    is_favorite: bool | None = None
 
 
 class ContactListItem(ContactBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    company_id: int | None = None
+    sector: str | None = None
+    seniority: str | None = None
+    is_favorite: bool = False
     latitude: float | None = None
     longitude: float | None = None
     source: ContactSource
@@ -144,14 +149,42 @@ class BulkGeocodeResult(BaseModel):
 class FacetItem(BaseModel):
     value: str
     count: int
+    id: int | None = None
+
+
+class CompanyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    sector: str | None = None
+    contact_count: int = 0
+
+
+class CompanyUpdate(BaseModel):
+    name: str | None = None
+    sector: str | None = None
+
+
+class CompanyDetail(CompanyOut):
+    seniority_breakdown: list[FacetItem] = []
+    contacts: list[ContactListItem] = []
+
+
+class BulkSectorRequest(BaseModel):
+    company_ids: list[int]
+    sector: str
 
 
 class StatsOut(BaseModel):
     total_contacts: int
     total_groups: int
     contacts_missing_city: int
+    total_favorites: int
     top_companies: list[FacetItem]
     contacts_by_group: list[FacetItem]
     connections_by_year: list[FacetItem]
+    top_sectors: list[FacetItem]
+    seniority_breakdown: list[FacetItem]
     upcoming_reminders: list[ReminderOut]
     recent_contacts: list[ContactListItem]
+    favorite_contacts: list[ContactListItem]
