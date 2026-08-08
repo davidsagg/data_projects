@@ -2,7 +2,10 @@ SHELL := /bin/bash
 
 .PHONY: setup dev build test lint clean help
 
-PYTHON  := backend/.venv/bin/python
+# Relativo a backend/ — todos os alvos que usam estas variáveis entram nessa
+# pasta antes de rodar. Com o caminho a partir da raiz, o `cd backend` fazia
+# virar backend/backend/.venv/... e a API não subia.
+PYTHON  := .venv/bin/python
 PYTEST  := $(PYTHON) -m pytest
 UVICORN := $(PYTHON) -m uvicorn
 ALEMBIC := $(PYTHON) -m alembic
