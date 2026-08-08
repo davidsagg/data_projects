@@ -13,7 +13,7 @@ Sistema de análise de áudio com embeddings, matching de licenciamento e simula
 - **Cobertura:** `make coverage` (HTML em `htmlcov/index.html`)
 - **Linter/formatter:** `black` — `make lint` (check) e `make format` (aplicar)
 - **AI local:** Ollama em `http://localhost:11434` (geração de estilos/progressões)
-- **MLflow UI:** `make mlflow` → http://localhost:5000
+- **MLflow UI:** `make mlflow` → http://localhost:5003 (5000 é do AirPlay Receiver no macOS)
 - **API:** `make api` → http://localhost:8000
 - **UI Streamlit:** `make ui` → http://localhost:8502
 - **Dev (API + UI juntos):** `make dev`

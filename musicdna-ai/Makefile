@@ -16,8 +16,8 @@ format:
 	black src/ tests/
 
 mlflow:
-	mlflow ui --backend-store-uri /workspace/mlflow/mlruns --port 5000 &
-	@echo 'MLflow UI em http://localhost:5000'
+	mlflow ui --backend-store-uri /workspace/mlflow/mlruns --port 5003 &
+	@echo 'MLflow UI em http://localhost:5003'
 
 test-all:
 	pytest tests/ -v --tb=short
@@ -43,9 +43,9 @@ airflow:
 	export AIRFLOW_HOME=/workspace/airflow && export PATH="/home/developer/.local/bin:$$PATH" && airflow standalone
 
 mlflow-ui:
-	mlflow ui --host 0.0.0.0 --port 5000 \
+	mlflow ui --host 0.0.0.0 --port 5003 \
 	  --backend-store-uri /workspace/mlflow/mlruns &
-	@echo 'MLflow UI: http://localhost:5000'
+	@echo 'MLflow UI: http://localhost:5003'
 
 dbt-run:
 	cd /workspace/dbt && /home/developer/.local/bin/dbt run
@@ -55,7 +55,7 @@ dbt-test:
 
 compose-up:
 	docker-compose up --build -d
-	@echo 'Servicos: API :8000 | UI :8502 | MLflow :5000 | Airflow :8080'
+	@echo 'Servicos: API :8000 | UI :8502 | MLflow :5003 | Airflow :8080'
 
 compose-down:
 	docker-compose down
@@ -63,7 +63,7 @@ compose-down:
 status:
 	@echo '=== MusicDNA AI - Status ==='
 	@curl -s http://localhost:8000/health || echo 'API: offline'
-	@curl -s http://localhost:5000/health || echo 'MLflow: offline'
+	@curl -s http://localhost:5003/health || echo 'MLflow: offline'
 	@echo '==========================='
 
 clean:
