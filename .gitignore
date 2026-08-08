@@ -67,3 +67,6 @@ saggicrm/data/
 # Rascunhos de artigo do Substack — só versionar após publicar
 **/substack_*.md
 **/docs/images/
+
+# Mapa de portas para uso local (inclui projetos fora deste repositório)
+PORTS.local.md
