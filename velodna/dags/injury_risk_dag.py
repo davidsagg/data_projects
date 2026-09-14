@@ -18,10 +18,10 @@ def assess_injury_risk(**ctx):
     import duckdb
     import requests
 
-    db_path = os.getenv("DB_PATH", "/workspace/data/velodna.duckdb")
+    db_path = os.getenv("DB_PATH", "data/velodna.duckdb")
     conn = duckdb.connect(db_path)
 
-    from src.storage.catalog_store import CatalogStore
+    from storage.catalog_store import CatalogStore
 
     CatalogStore(conn).initialize_schema()
 
@@ -30,7 +30,7 @@ def assess_injury_risk(**ctx):
     today = date.today()
 
     metrics_row = conn.execute(
-        "SELECT tsb FROM athlete_metrics ORDER BY date DESC LIMIT 1"
+        "SELECT tsb FROM training_load ORDER BY date DESC LIMIT 1"
     ).fetchone()
     tsb = float(metrics_row[0]) if metrics_row else 0.0
 
@@ -48,8 +48,8 @@ def assess_injury_risk(**ctx):
         tss_by_week.append(float(row[0]) if row else 0.0)
         dist_by_week.append(float(row[1]) if row else 0.0)
 
-    from src.ai.injury_risk_coach import InjuryRiskCoach
-    from src.ai.ollama_client import OllamaClient, OllamaUnavailableError
+    from ai.injury_risk_coach import InjuryRiskCoach
+    from ai.ollama_client import OllamaClient, OllamaUnavailableError
 
     coach = InjuryRiskCoach(OllamaClient())
     factors = coach.assess_factors(tss_by_week, dist_by_week, tsb)

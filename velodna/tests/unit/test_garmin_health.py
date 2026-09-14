@@ -1,7 +1,7 @@
 import pytest
 from datetime import date
 from unittest.mock import patch
-from src.ingestion.garmin_health_client import GarminHealthClient, HealthDaily
+from ingestion.garmin_health_client import GarminHealthClient, HealthDaily
 
 MOCK_SLEEP = {"dailySleepDTO":{"sleepTimeSeconds":25200,
     "sleepScores":{"overall":{"value":78}},

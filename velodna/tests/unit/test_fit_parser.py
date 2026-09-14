@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from src.ingestion.fit_parser import FITParser, Activity, ActivityStream, FITParseError
+from ingestion.fit_parser import FITParser, Activity, ActivityStream, FITParseError
 FIXTURES = Path("tests/fixtures")
 
 def test_parse_activity_returns_activity_object():
@@ -24,3 +24,22 @@ def test_parse_invalid_file_raises_fit_parse_error():
     parser = FITParser()
     with pytest.raises(FITParseError):
         parser.parse(FIXTURES / "sample_invalid.fit")
+
+
+def test_timestamps_are_labelled_utc():
+    """O FIT grava em UTC, mas o `fitparse` devolve datetime naive.
+
+    Sem rótulo, o DuckDB presume o fuso local ao gravar na coluna TIMESTAMPTZ e
+    desloca o instante — em São Paulo, três horas à frente. O erro é silencioso:
+    a data continua certa e só o horário fica errado.
+    """
+    from datetime import timezone
+
+    activity = FITParser().parse(FIXTURES / "sample.fit")
+
+    assert activity.start_time.tzinfo is not None, "start_time precisa ter fuso"
+    assert activity.start_time.utcoffset() == timezone.utc.utcoffset(None)
+
+    for stream in activity.streams[:5]:
+        assert stream.timestamp.tzinfo is not None, "stream sem fuso"
+        assert stream.timestamp.utcoffset() == timezone.utc.utcoffset(None)

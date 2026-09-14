@@ -1,11 +1,42 @@
+"""
+Tracker MLflow do VeloDNA.
+
+O backend de arquivos (`./mlruns`) foi bloqueado pelo MLflow em 2026 — usar
+SQLite local mantém o rastreamento offline, sem servidor, e sem depender de
+uma feature em fim de vida.
+"""
 from __future__ import annotations
 
-import mlflow
+import os
 from datetime import date
+from pathlib import Path
+
+import mlflow
+
+DEFAULT_TRACKING_DB = Path("mlflow/mlflow.db")
+
+
+def _resolve_tracking_uri() -> str:
+    """Retorna a URI de tracking, criando o diretório do SQLite se preciso.
+
+    Returns:
+        Valor de `MLFLOW_TRACKING_URI` quando definido; senão um SQLite local.
+    """
+    uri = os.getenv("MLFLOW_TRACKING_URI")
+    if uri:
+        return uri
+    DEFAULT_TRACKING_DB.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{DEFAULT_TRACKING_DB}"
 
 
 class VeloDNATracker:
     """Wrapper MLflow para rastreamento de métricas e experimentos do VeloDNA."""
+
+    def __init__(self, tracking_uri: str | None = None) -> None:
+        """Args:
+            tracking_uri: backend de tracking; resolvido do ambiente se omitido.
+        """
+        mlflow.set_tracking_uri(tracking_uri or _resolve_tracking_uri())
 
     def log_ftp(self, ftp_w: float, method: str = "best_20min_95pct") -> None:
         """Registra uma detecção de FTP como experimento MLflow.

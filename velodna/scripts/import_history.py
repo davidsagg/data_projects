@@ -1,8 +1,12 @@
 """
 VeloDNA — Importação em lote de arquivos FIT históricos.
 
+O cálculo de TSS/NP não acontece aqui: é responsabilidade de
+`scripts/recompute_metrics.py`, que roda sobre os streams já persistidos e usa
+o FTP vigente na data de cada atividade.
+
 Uso:
-    # Importar todos os .fit de /data/fit/  (padrão via .env)
+    # Importar todos os .fit de data/fit/ (padrão via .env)
     .venv/bin/python scripts/import_history.py
 
     # Importar um diretório específico
@@ -11,7 +15,7 @@ Uso:
     # Importar apenas um arquivo
     .venv/bin/python scripts/import_history.py --file tests/fixtures/sample.fit
 
-    # Só recalcular PMC (sem reimportar arquivos)
+    # Só recalcular o PMC (sem reimportar arquivos)
     .venv/bin/python scripts/import_history.py --pmc-only
 """
 from __future__ import annotations
@@ -22,127 +26,136 @@ import sys
 from datetime import date
 from pathlib import Path
 
-# Garante que src/ está no path quando rodado da raiz do projeto
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import duckdb
-from dotenv import load_dotenv
+import duckdb  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-from src.ingestion.catalog_store import CatalogStore
-from src.ingestion.fit_parser import FITParser, FITParseError
-from src.analytics.pmc_calculator import PMCCalculator
+from analytics.pmc_calculator import PMCCalculator  # noqa: E402
+from ingestion.fit_parser import FITParseError  # noqa: E402
+from ingestion.pipeline import IngestionPipeline  # noqa: E402
+from storage.catalog_store import CatalogStore  # noqa: E402
 
-DB_PATH      = os.getenv("DB_PATH",      "/workspace/data/velodna.duckdb")
-FIT_DATA_DIR = os.getenv("FIT_DATA_DIR", "/data/fit")
+DB_PATH = os.getenv("DB_PATH", "data/velodna.duckdb")
+FIT_DATA_DIR = os.getenv("FIT_DATA_DIR", "data/fit")
 
 
-def _import_file(parser: FITParser, store: CatalogStore, path: Path) -> str | None:
-    """Parseia um .fit e persiste. Retorna activity_id ou None em caso de erro."""
-    import uuid
+def _import_file(pipeline: IngestionPipeline, path: Path) -> str | None:
+    """Importa um arquivo `.fit`, tolerando arquivos corrompidos.
+
+    Args:
+        pipeline: pipeline de ingestão já ligado ao catálogo.
+        path: caminho do arquivo.
+
+    Returns:
+        UUID da atividade, ou None se o arquivo foi ignorado.
+    """
     try:
-        activity = parser.parse(path)
-        activity_id = str(uuid.uuid4())
-        store.upsert_activity(activity, activity_id)
-        return activity_id
+        return pipeline.ingest_fit(path)
     except FITParseError as e:
         print(f"  ⚠  Ignorado ({e})")
         return None
-    except Exception as e:
+    except Exception as e:  # arquivo corrompido não deve abortar o lote
         print(f"  ✗  Erro inesperado: {e}")
         return None
 
 
-def _compute_tss(conn: duckdb.DuckDBPyConnection, ftp: float = 200.0) -> int:
+def _discover_fit_files(root: Path) -> list[Path]:
+    """Encontra arquivos FIT sob um diretório, comprimidos ou não.
+
+    A busca ignora maiúsculas: exports do TrainingPeaks vêm como `.FIT.gz`
+    enquanto Wahoo e Zwift usam `.fit.gz`, e um glob sensível a caixa deixaria
+    metade dos arquivos para trás sem avisar.
+
+    Args:
+        root: diretório varrido recursivamente.
+
+    Returns:
+        Caminhos ordenados dos arquivos encontrados.
     """
-    Calcula TSS para atividades que ainda não têm TSS definido.
-    Fórmula: TSS = (duration_s / 3600) × (avg_power / FTP)² × 100
-    Fallback quando não há potência: TSS = duration_h × 45 (estimativa moderada).
-    """
-    updated = conn.execute("""
-        UPDATE activities
-        SET tss = CASE
-            WHEN avg_power_w IS NOT NULL AND avg_power_w > 0
-                THEN ROUND((duration_s / 3600.0) * POWER(avg_power_w / ?, 2) * 100, 1)
-            ELSE
-                ROUND(duration_s / 3600.0 * 45, 1)
-        END
-        WHERE tss IS NULL AND duration_s IS NOT NULL
-    """, [ftp]).rowcount
-    return updated
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.name.lower().endswith((".fit", ".fit.gz"))
+    )
 
 
 def run_import(fit_dir: Path | None, single_file: Path | None, pmc_only: bool) -> None:
+    """Importa arquivos FIT e recalcula a série de carga de treino.
+
+    Args:
+        fit_dir: diretório varrido recursivamente por `.fit`.
+        single_file: importa apenas este arquivo, quando informado.
+        pmc_only: pula a importação e só recalcula o PMC.
+    """
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = duckdb.connect(DB_PATH)
     store = CatalogStore(conn)
     store.initialize_schema()
 
     if not pmc_only:
-        parser = FITParser()
+        pipeline = IngestionPipeline(conn)
         imported = skipped = 0
 
-        files: list[Path] = []
         if single_file:
             files = [single_file]
         elif fit_dir and fit_dir.exists():
-            files = sorted(fit_dir.glob("**/*.fit"))
+            files = _discover_fit_files(fit_dir)
         else:
+            files = []
             print(f"Diretório não encontrado: {fit_dir}")
 
         if not files:
             print("Nenhum arquivo .fit encontrado.")
         else:
-            print(f"Encontrado(s) {len(files)} arquivo(s) .fit — iniciando importação...\n")
+            print(f"Encontrado(s) {len(files)} arquivo(s) .fit — importando...\n")
             for f in files:
                 print(f"  → {f.name}", end=" ")
-                aid = _import_file(parser, store, f)
-                if aid:
-                    print(f"✓  ({aid[:8]}...)")
+                activity_id = _import_file(pipeline, f)
+                if activity_id:
+                    print(f"✓  ({activity_id[:8]}...)")
                     imported += 1
                 else:
                     skipped += 1
+            print(f"\nImportados: {imported}  |  Ignorados/erros: {skipped}")
 
-            print(f"\n✅ Importados: {imported}  |  Ignorados/erros: {skipped}")
-
-    # Calcular TSS para atividades sem potência registrada
-    ftp = float(os.getenv("FTP_W", "200"))
-    n = _compute_tss(conn, ftp)
-    if n:
-        print(f"\nTSS estimado para {n} atividade(s) sem TSS (FTP={ftp}W assumido)")
-        print("  → Ajuste FTP_W no .env para valores mais precisos.")
-
-    # Recalcular PMC (CTL/ATL/TSB) para todas as atividades com TSS
     print("\nCalculando CTL/ATL/TSB...")
     PMCCalculator().run_and_store(store, date.today())
 
-    count = conn.execute(
-        "SELECT COUNT(*) FROM athlete_metrics WHERE ctl IS NOT NULL"
+    activities = conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
+    streams = conn.execute("SELECT COUNT(*) FROM activity_streams").fetchone()[0]
+    load_days = conn.execute(
+        "SELECT COUNT(*) FROM training_load WHERE ctl IS NOT NULL"
     ).fetchone()[0]
-    print(f"✅ athlete_metrics atualizado: {count} dia(s) com CTL calculado")
+    no_tss = conn.execute(
+        "SELECT COUNT(*) FROM activities WHERE tss IS NULL"
+    ).fetchone()[0]
 
-    # Resumo do banco
-    acts   = conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
-    stream = conn.execute("SELECT COUNT(*) FROM activity_streams").fetchone()[0]
-    print(f"\n📊 Banco atual:")
-    print(f"   activities       : {acts}")
-    print(f"   activity_streams : {stream:,}")
-    print(f"   athlete_metrics  : {count}")
-    print(f"\n🚀 Abra http://localhost:5173 para ver os dados.")
+    print("\nBanco atual:")
+    print(f"   activities       : {activities:,}")
+    print(f"   activity_streams : {streams:,}")
+    print(f"   training_load    : {load_days:,} dia(s) com CTL")
+
+    if no_tss:
+        print(
+            f"\n{no_tss:,} atividade(s) sem TSS — "
+            "rode scripts/recompute_metrics.py para calcular NP/IF/TSS."
+        )
 
     conn.close()
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Importa arquivos FIT para o VeloDNA")
-    ap.add_argument("--dir",      type=Path, default=None, help="Diretório com .fit")
-    ap.add_argument("--file",     type=Path, default=None, help="Arquivo .fit único")
-    ap.add_argument("--pmc-only", action="store_true",     help="Só recalcula PMC")
+    ap.add_argument("--dir", type=Path, default=None, help="Diretório com .fit")
+    ap.add_argument("--file", type=Path, default=None, help="Arquivo .fit único")
+    ap.add_argument("--pmc-only", action="store_true", help="Só recalcula o PMC")
     args = ap.parse_args()
 
-    fit_dir = args.dir or Path(FIT_DATA_DIR)
-    run_import(fit_dir, args.file, args.pmc_only)
+    run_import(args.dir or Path(FIT_DATA_DIR), args.file, args.pmc_only)
 
 
 if __name__ == "__main__":

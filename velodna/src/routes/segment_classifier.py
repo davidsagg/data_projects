@@ -6,7 +6,7 @@ Categorias de subida: HC, Cat1–Cat4 baseadas no score de dificuldade.
 """
 from __future__ import annotations
 
-from src.routes.gpx_analyzer import AnalyzedSegment
+from routes.gpx_analyzer import AnalyzedSegment
 
 
 class SegmentClassifier:

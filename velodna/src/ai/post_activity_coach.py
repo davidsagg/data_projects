@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from src.ai.context_builder import ContextBuilder
+from ai.context_builder import ContextBuilder
 
 
 @dataclass

@@ -1,9 +1,9 @@
 import pytest
 import duckdb
-from src.routes.gpx_analyzer import GPXAnalyzer, ElevationProfile, AnalyzedSegment
-from src.routes.segment_classifier import SegmentClassifier
-from src.ingestion.catalog_store import CatalogStore
-from src.ingestion.gpx_loader import Route, RouteWaypoint
+from routes.gpx_analyzer import GPXAnalyzer, ElevationProfile, AnalyzedSegment
+from routes.segment_classifier import SegmentClassifier
+from storage.catalog_store import CatalogStore
+from ingestion.gpx_loader import Route, RouteWaypoint
 
 
 def route(wps_data):

@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.ingestion.gpx_loader import Route
+from ingestion.gpx_loader import Route
 
 
 @dataclass
@@ -95,40 +95,49 @@ class GPXAnalyzer:
         max_grad = max((abs(s.avg_gradient_pct) for s in segs), default=0)
         return ElevationProfile(gain, loss, max_grad, segs)
 
-    def analyze_and_store(self, route: Route, store) -> ElevationProfile:
+    def analyze_and_store(
+        self, route: Route, store, athlete_id: str | None = None
+    ) -> ElevationProfile:
         """Analisa a rota e persiste resultado no DuckDB via CatalogStore.
 
         Args:
             route: objeto Route com waypoints
             store: instância de CatalogStore
+            athlete_id: dono da rota; resolvido do catálogo quando omitido
 
         Returns:
             ElevationProfile calculado.
         """
+        if athlete_id is None:
+            athlete_id = store.resolve_athlete_id()
         profile = self.analyze(route)
-        route_id = str(uuid.uuid4())
-
-        route_data = {
-            "route_id": route_id,
-            "name": route.name,
-            "source": route.source,
-            "distance_m": route.distance_m,
-            "elevation_gain_m": profile.total_gain_m,
-            "elevation_loss_m": profile.total_loss_m,
-        }
 
         segments = [
             {
-                "segment_id": str(uuid.uuid4()),
-                "route_id": route_id,
-                "sequence": i,
                 "segment_type": s.segment_type,
                 "length_m": s.length_m,
                 "elevation_delta_m": s.elevation_delta_m,
                 "avg_gradient_pct": s.avg_gradient_pct,
             }
-            for i, s in enumerate(profile.segments)
+            for s in profile.segments
+        ]
+        waypoints = [
+            {
+                "lat": wp.lat,
+                "lon": wp.lon,
+                "altitude_m": wp.altitude_m,
+                "distance_from_start_m": wp.distance_m,
+            }
+            for wp in route.waypoints
         ]
 
-        store.upsert_route(route_data, segments)
+        store.insert_route(
+            athlete_id,
+            route.name,
+            waypoints,
+            segments=segments,
+            source_file_path=route.gpx_file_path,
+            distance_m=route.distance_m,
+            elevation_gain_m=profile.total_gain_m,
+        )
         return profile

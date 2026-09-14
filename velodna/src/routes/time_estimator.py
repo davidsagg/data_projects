@@ -5,7 +5,7 @@ Velocidade estimada a partir do FTP, CTL (fitness) e gradiente do segmento.
 """
 from __future__ import annotations
 
-from src.routes.gpx_analyzer import AnalyzedSegment
+from routes.gpx_analyzer import AnalyzedSegment
 
 
 class TimeEstimator:

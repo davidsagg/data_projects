@@ -9,8 +9,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
 
-from src.ingestion.gpx_loader import GPXLoader
-from src.routes.gpx_analyzer import GPXAnalyzer
+from ingestion.gpx_loader import GPXLoader
+from routes.gpx_analyzer import GPXAnalyzer
 
 router = APIRouter()
 

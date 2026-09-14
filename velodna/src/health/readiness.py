@@ -5,7 +5,7 @@ Composição: sono (40%), HRV (30%), body battery (20%), TSB (10%).
 """
 from __future__ import annotations
 
-from src.ingestion.garmin_health_client import HealthDaily
+from ingestion.garmin_health_client import HealthDaily
 
 
 class ReadinessCalculator:

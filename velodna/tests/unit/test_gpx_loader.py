@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from src.ingestion.gpx_loader import GPXLoader, Route, RouteWaypoint, GPXParseError
+from ingestion.gpx_loader import GPXLoader, Route, RouteWaypoint, GPXParseError
 FIXTURES = Path("tests/fixtures")
 
 def test_load_gpx_returns_route_with_waypoints():

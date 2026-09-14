@@ -3,123 +3,212 @@ PMC Calculator — Performance Management Chart (CTL / ATL / TSB).
 
 Referência: Coggan & Allen, "Training and Racing with a Power Meter".
 
-  CTL (Chronic Training Load)  — fitness   — EWA com janela de 42 dias
-  ATL (Acute Training Load)    — fadiga    — EWA com janela de  7 dias
-  TSB (Training Stress Balance)— forma     — CTL - ATL
+  CTL (Chronic Training Load)  — fitness  — média exponencial de 42 dias
+  ATL (Acute Training Load)    — fadiga   — média exponencial de  7 dias
+  TSB (Training Stress Balance)— forma    — CTL do dia anterior menos ATL
+
+Duas propriedades são essenciais e fáceis de errar:
+
+1. A série precisa ser **diária e contínua**. Dias de descanso entram com
+   TSS = 0 — é exatamente neles que o decaimento exponencial acontece. Iterar
+   apenas sobre os dias com atividade faz a fadiga nunca baixar.
+2. O TSS de um dia é a **soma** de todas as atividades daquele dia. Quem treina
+   duas vezes no mesmo dia não pode ter a primeira sessão descartada.
 """
 from __future__ import annotations
 
 import math
-from datetime import date
-from typing import Optional
+from datetime import date, timedelta
+
+CTL_DECAY_DAYS = 42
+ATL_DECAY_DAYS = 7
 
 
 class PMCCalculator:
-    """Calcula CTL, ATL e TSB a partir de séries de TSS por data."""
+    """Calcula CTL, ATL e TSB a partir da série diária de TSS."""
 
-    def _ewa(self, tss_by_date: dict, decay: int) -> dict:
-        """Exponential Weighted Average sobre série diária de TSS.
-
-        Args:
-            tss_by_date: dicionário {date: tss_float}
-            decay: constante de tempo em dias (42 para CTL, 7 para ATL)
-
-        Returns:
-            Dicionário {date: valor_ewa} para cada data da série.
-        """
-        a = 1 - math.exp(-1 / decay)
-        r: dict = {}
-        v = 0.0
-        for d in sorted(tss_by_date):
-            v = a * tss_by_date[d] + (1 - a) * v
-            r[d] = round(v, 4)
-        return r
-
-    def calculate_ctl(self, tss_by_date: dict, decay: int = 42) -> dict:
-        """Retorna série de CTL (fitness) — EWA de 42 dias.
+    def _ewa(
+        self, daily_tss: dict[date, float], decay: int, seed: float = 0.0
+    ) -> dict[date, float]:
+        """Média exponencial sobre a série diária de TSS.
 
         Args:
-            tss_by_date: dicionário {date: tss_float}
-            decay: constante de tempo (padrão 42 dias)
+            daily_tss: série contínua {data: tss}, já sem lacunas.
+            decay: constante de tempo em dias (42 para CTL, 7 para ATL).
+            seed: valor de partida, para quando existe treino anterior ao
+                início da série.
 
         Returns:
-            Dicionário {date: ctl_float}
+            Dicionário {data: valor} para cada data da série.
         """
-        return self._ewa(tss_by_date, decay)
+        alpha = 1 - math.exp(-1 / decay)
+        result: dict[date, float] = {}
+        value = seed
+        for day in sorted(daily_tss):
+            value = alpha * daily_tss[day] + (1 - alpha) * value
+            result[day] = round(value, 4)
+        return result
 
-    def calculate_atl(self, tss_by_date: dict, decay: int = 7) -> dict:
-        """Retorna série de ATL (fadiga) — EWA de 7 dias.
+    def calculate_ctl(
+        self,
+        daily_tss: dict[date, float],
+        decay: int = CTL_DECAY_DAYS,
+        seed: float = 0.0,
+    ) -> dict[date, float]:
+        """Retorna a série de CTL (fitness).
 
         Args:
-            tss_by_date: dicionário {date: tss_float}
-            decay: constante de tempo (padrão 7 dias)
+            daily_tss: série diária contínua de TSS.
+            decay: constante de tempo, em dias.
+            seed: CTL na véspera do início da série.
 
         Returns:
-            Dicionário {date: atl_float}
+            Dicionário {data: ctl}.
         """
-        return self._ewa(tss_by_date, decay)
+        return self._ewa(daily_tss, decay, seed)
+
+    def calculate_atl(
+        self,
+        daily_tss: dict[date, float],
+        decay: int = ATL_DECAY_DAYS,
+        seed: float = 0.0,
+    ) -> dict[date, float]:
+        """Retorna a série de ATL (fadiga).
+
+        Args:
+            daily_tss: série diária contínua de TSS.
+            decay: constante de tempo, em dias.
+            seed: ATL na véspera do início da série.
+
+        Returns:
+            Dicionário {data: atl}.
+        """
+        return self._ewa(daily_tss, decay, seed)
 
     def calculate_tsb(self, ctl: float, atl: float) -> float:
-        """Retorna TSB (forma) = CTL - ATL.
+        """Retorna o TSB (forma) a partir de CTL e ATL.
 
         Args:
-            ctl: valor de CTL para a data
-            atl: valor de ATL para a data
+            ctl: fitness na data.
+            atl: fadiga na data.
 
         Returns:
             TSB arredondado a 4 casas decimais.
         """
         return round(ctl - atl, 4)
 
-    def run_and_store(self, store, end_date: date) -> None:
-        """Calcula CTL/ATL/TSB para todas as datas até end_date e persiste.
+    def build_daily_series(
+        self,
+        tss_rows: list[tuple[date, float]],
+        end_date: date,
+        start_date: date | None = None,
+    ) -> dict[date, float]:
+        """Monta a série diária contínua de TSS.
 
         Args:
-            store: instância de CatalogStore com conexão DuckDB ativa
-            end_date: data limite para persistência das métricas
+            tss_rows: pares (data, tss), possivelmente com datas repetidas.
+            end_date: última data da série.
+            start_date: primeira data; usa a menor data observada se omitido.
+
+        Returns:
+            Dicionário {data: tss_somado} com todos os dias do intervalo,
+            inclusive os de descanso, com valor 0.0.
         """
+        if not tss_rows:
+            return {}
+
+        totals: dict[date, float] = {}
+        for day, tss in tss_rows:
+            totals[day] = totals.get(day, 0.0) + float(tss or 0.0)
+
+        first = start_date or min(totals)
+        if end_date < first:
+            return {}
+
+        return {
+            first + timedelta(days=offset): totals.get(first + timedelta(days=offset), 0.0)
+            for offset in range((end_date - first).days + 1)
+        }
+
+    def run_and_store(
+        self,
+        store,
+        end_date: date,
+        athlete_id: str | None = None,
+        seed_ctl: float = 0.0,
+        seed_atl: float = 0.0,
+    ) -> None:
+        """Recalcula a série completa de carga e a persiste.
+
+        Args:
+            store: CatalogStore com conexão ativa.
+            end_date: última data a persistir.
+            athlete_id: atleta alvo; resolvido do catálogo quando omitido.
+            seed_ctl: CTL na véspera da primeira atividade. Relevante quando o
+                histórico foi truncado: sem semente, o primeiro treino forte
+                aparece contra um CTL zero e gera um TSB implausível.
+            seed_atl: ATL na véspera da primeira atividade.
+        """
+        athlete_id = athlete_id or store.resolve_athlete_id()
+
         rows = store.conn.execute(
-            "SELECT CAST(start_time AS DATE), tss FROM activities "
-            "WHERE tss IS NOT NULL ORDER BY 1"
+            """
+            SELECT CAST(started_at AS DATE) AS day, SUM(tss)
+            FROM activities
+            WHERE tss IS NOT NULL AND athlete_id = ?
+            GROUP BY day
+            ORDER BY day
+            """,
+            [athlete_id],
         ).fetchall()
         if not rows:
             return
 
-        tss_by_date = {r[0]: r[1] for r in rows}
-        ctl = self.calculate_ctl(tss_by_date)
-        atl = self.calculate_atl(tss_by_date)
+        daily_tss = self.build_daily_series(
+            [(r[0], r[1]) for r in rows], end_date
+        )
+        if not daily_tss:
+            return
 
-        for d in ctl:
-            if d <= end_date:
-                store.upsert_athlete_metrics(
-                    d,
-                    ctl[d],
-                    atl.get(d, 0),
-                    self.calculate_tsb(ctl[d], atl.get(d, 0)),
-                )
+        ctl = self.calculate_ctl(daily_tss, seed=seed_ctl)
+        atl = self.calculate_atl(daily_tss, seed=seed_atl)
+
+        store.bulk_upsert_training_load(
+            athlete_id,
+            [
+                (day, ctl[day], atl[day], self.calculate_tsb(ctl[day], atl[day]),
+                 daily_tss[day])
+                for day in sorted(daily_tss)
+            ],
+        )
 
 
 class FTPDetector:
-    """Estima o FTP do atleta como 95% da melhor potência média de 20 minutos."""
+    """Estima o FTP como 95% da melhor potência média de 20 minutos."""
 
-    MIN = 1200  # 20 minutos em segundos
+    WINDOW_S = 1200
 
-    def detect(self, streams) -> Optional[float]:
-        """Detecta FTP a partir de uma lista de ActivityStream.
-
-        Requer pelo menos 20 minutos (1200 segundos) de dados de potência.
+    def detect(self, series) -> float | None:
+        """Detecta o FTP a partir de uma ActivitySeries.
 
         Args:
-            streams: lista de ActivityStream com campo power_w
+            series: série já segmentada da atividade.
 
         Returns:
-            FTP estimado em watts, ou None se dados insuficientes.
+            FTP estimado em watts, ou None se não há 20 minutos contínuos
+            de potência.
         """
-        pw = [s.power_w for s in streams if s.power_w is not None]
-        if len(pw) < self.MIN:
-            return None
-        best = max(
-            sum(pw[i : i + self.MIN]) / self.MIN
-            for i in range(len(pw) - self.MIN + 1)
-        )
-        return round(best * 0.95, 1)
+        from analytics.power_metrics import rolling_mean
+
+        best = 0.0
+        for segment_power in series.channel("power"):
+            import numpy as np
+
+            clean = np.nan_to_num(segment_power, nan=0.0)
+            if clean.size < self.WINDOW_S:
+                continue
+            rolled = rolling_mean(clean, self.WINDOW_S)
+            if rolled.size:
+                best = max(best, float(rolled.max()))
+
+        return round(best * 0.95, 1) if best > 0 else None

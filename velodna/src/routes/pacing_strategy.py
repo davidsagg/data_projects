@@ -5,7 +5,7 @@ Ajusta o percentual do FTP com base no gradiente, tipo de segmento e TSB.
 """
 from __future__ import annotations
 
-from src.routes.gpx_analyzer import AnalyzedSegment
+from routes.gpx_analyzer import AnalyzedSegment
 
 
 class PacingStrategy:

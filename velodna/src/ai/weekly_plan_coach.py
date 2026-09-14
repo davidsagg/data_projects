@@ -6,7 +6,7 @@ nos dias disponíveis, priorizando recuperação quando TSB < -15.
 """
 from __future__ import annotations
 
-from src.ai.context_builder import ContextBuilder
+from ai.context_builder import ContextBuilder
 
 
 class WeeklyPlanCoach:

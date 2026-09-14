@@ -1,9 +1,9 @@
 import pytest
 from datetime import date
-from src.health.sleep_correlator import SleepCorrelator
-from src.health.hrv_trend import HRVTrendAnalyzer
-from src.health.readiness import ReadinessCalculator
-from src.ingestion.garmin_health_client import HealthDaily
+from health.sleep_correlator import SleepCorrelator
+from health.hrv_trend import HRVTrendAnalyzer
+from health.readiness import ReadinessCalculator
+from ingestion.garmin_health_client import HealthDaily
 
 
 def test_correlator_returns_coefficient():

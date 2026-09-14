@@ -1,7 +1,7 @@
 import pytest
-from src.routes.gpx_analyzer import AnalyzedSegment
-from src.routes.pacing_strategy import PacingStrategy
-from src.routes.time_estimator import TimeEstimator
+from routes.gpx_analyzer import AnalyzedSegment
+from routes.pacing_strategy import PacingStrategy
+from routes.time_estimator import TimeEstimator
 
 
 def test_pacing_lower_on_climbs():

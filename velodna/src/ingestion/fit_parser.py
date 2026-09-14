@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -40,6 +40,49 @@ class FITParseError(Exception):
 _SEMICIRCLE_TO_DEG = 180.0 / 2**31
 
 
+def _open_fit(path):
+    """Abre um arquivo FIT, transparentemente para `.fit` e `.fit.gz`.
+
+    Exports do Wahoo ELEMNT chegam comprimidos; o `fitparse` aceita tanto um
+    caminho quanto um objeto de arquivo, então o gzip é resolvido em memória.
+
+    Args:
+        path: caminho do arquivo, com ou sem extensão `.gz`.
+
+    Returns:
+        Caminho em texto, ou um buffer com o conteúdo descomprimido.
+    """
+    if path.suffix.lower() != ".gz":
+        return str(path)
+
+    import gzip
+    import io
+
+    with gzip.open(path, "rb") as handle:
+        return io.BytesIO(handle.read())
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Rotula um timestamp do FIT como UTC.
+
+    O protocolo FIT grava todos os timestamps em UTC, mas o `fitparse` devolve
+    `datetime` **naive** — sem fuso. Entregar esse valor naive ao DuckDB fazia a
+    coluna `TIMESTAMPTZ` presumir o fuso local da máquina e gravar o instante
+    três horas à frente do real (em São Paulo). O erro era silencioso: as datas
+    continuavam certas, os horários não, e só apareceu quando o Strava trouxe a
+    mesma pedalada com o horário verdadeiro e o casamento de ±5 min falhou.
+
+    Args:
+        value: timestamp devolvido pelo `fitparse`, naive ou já ciente de fuso.
+
+    Returns:
+        O mesmo instante rotulado como UTC, ou None se a entrada for None.
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
 class FITParser:
     def parse(self, path) -> Activity:
         from pathlib import Path
@@ -47,7 +90,7 @@ class FITParser:
 
         path = Path(path)
         try:
-            fit = fitparse.FitFile(str(path))
+            fit = fitparse.FitFile(_open_fit(path))
             # force full parse so corrupt files raise immediately
             sessions = list(fit.get_messages("session"))
         except Exception as exc:
@@ -58,7 +101,7 @@ class FITParser:
 
         s = sessions[0]
 
-        start_time = s.get_value("start_time")
+        start_time = _as_utc(s.get_value("start_time"))
         if start_time is None:
             raise FITParseError(f"Missing start_time in {path.name}")
 
@@ -71,7 +114,7 @@ class FITParser:
 
         streams: list[ActivityStream] = []
         for record in fit.get_messages("record"):
-            ts = record.get_value("timestamp")
+            ts = _as_utc(record.get_value("timestamp"))
             if ts is None:
                 continue
             lat_sc = record.get_value("position_lat")

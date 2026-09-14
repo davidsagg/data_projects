@@ -2,7 +2,48 @@
 
 Plataforma local de performance ciclística. Privacidade-first: dados de saúde e treino nunca saem do dispositivo.
 
-**Versão atual:** v1.1.0 · **Testes:** 89 passando
+**Versão atual:** v2.1.0 · **Testes:** 340 passando
+
+> **v2.1.0 (2026-09-13)** — integração com o Strava (OAuth com rotação de token,
+> sync incremental e dedupe contra o acervo `.fit`), visão da semana executada com
+> distribuição polarizada, e quatro análises avançadas: detecção de intervalos,
+> durabilidade, W'bal corrigido (Skiba) e agregação semanal de zonas.
+>
+> **Correção de fuso (2026-09-13).** O `fitparse` devolve timestamps naive e o padrão
+> FIT grava em UTC; ao entrar numa coluna `TIMESTAMPTZ` o DuckDB presumia o fuso local
+> e gravava o instante 3 h à frente. As 634 atividades de `.fit` foram reinterpretadas
+> via `scripts/fix_fit_timezone.py`, e o parser passou a rotular UTC (`_as_utc`). Só
+> uma atividade mudou de data. O erro ficou invisível por meses porque as datas
+> continuavam certas — apareceu quando o Strava trouxe a mesma pedalada com o horário
+> verdadeiro e o casamento de ±5 min falhou, duplicando o registro.
+
+> **v2.0.0 (2026-07-25)** — migração do schema legado (`src/ingestion/catalog_store.py`,
+> removido) para o schema canônico em `src/storage/`, e reconstrução da fundação analítica:
+> NP/IF/VI/EF reais, histórico de eFTP, HRSS calibrado e PMC contínuo.
+> Banco anterior preservado em `data/velodna_legacy.duckdb`.
+
+**Escopo dos dados:** por decisão do Dave, o catálogo mantém apenas de **2023 em diante**
+(754 atividades, 2023-01-02 a 2026-09-13). As atividades de 2012–2022 foram removidas;
+seguem recuperáveis no banco legado, nos `.fit` originais em `data/fit/` e no Strava.
+
+⚠️ **O piso de 2023 é aplicado no código**, em `scripts/sync_strava.py` (`CATALOG_START`).
+A conta do Strava tem histórico desde 2012: um `--all` sem o piso reinjeta 1.367
+atividades que foram descartadas de propósito. Use `--ignore-scope` só se a intenção
+for mesmo trazer tudo.
+
+**Perfil do atleta:** FTP 217 W · FC máx 186 · FC repouso 58 · 71 kg. Cadastrado via
+`scripts/set_athlete_profile.py`. A FC de limiar (~152 bpm) é calibrada dos dados, não
+informada — ver a etapa `calibrate` do recompute.
+
+**Protocolo de teste do atleta:** um teste por ano, em janeiro, com esforços máximos de
+**1 min e 12 min** — que é um teste de potência crítica de dois pontos. Registrar com
+`--cp-test AAAA-MM-DD`. Testes registrados: 2024-01-20 (CP 218,1 W), 2025-01-25 (206,4 W),
+2026-01-31 (218,1 W), com W' entre 16,8 e 17,2 kJ.
+
+**Potência de corrida não entra nas métricas de ciclismo.** O atleta usa medidor de potência
+correndo, e a escala é outra: 266 W em 30 min de corrida contra 219 W pedalando. Estimativa de
+FTP e curva de potência filtram por `sport_type` (`ftp_history.POWER_SPORTS`, parâmetro `sport`
+nos endpoints). Misturar as duas inflava o eFTP em até 25%.
 
 ---
 
@@ -16,13 +57,72 @@ Plataforma local de performance ciclística. Privacidade-first: dados de saúde 
 - **AI local:** Ollama em `http://localhost:11434` (llama3:latest, fallback mistral:latest)
 - **Variáveis de ambiente:** definidas em `.env` (não commitado) — ver `.env.example` se existir
 
+### Scripts de manutenção
+
+```bash
+# Importar arquivos .fit em lote (data/fit/)
+.venv/bin/python scripts/import_history.py
+
+# Recomputar métricas derivadas — etapas encadeadas, idempotentes
+.venv/bin/python scripts/recompute_metrics.py
+.venv/bin/python scripts/recompute_metrics.py --stage curves,metrics
+
+# Cadastrar perfil do atleta e/ou cortar histórico
+.venv/bin/python scripts/set_athlete_profile.py --ftp 217 --max-hr 186 \
+    --resting-hr 58 --weight 71 --drop-before 2023-01-01
+
+# Registrar um teste de potência crítica (protocolo 1 min + 12 min)
+.venv/bin/python scripts/set_athlete_profile.py --cp-test 2026-01-31
+
+# Sincronizar saúde do Garmin — incremental e retomável
+.venv/bin/python scripts/sync_garmin_health.py --days 30
+.venv/bin/python scripts/sync_garmin_health.py --start 2023-06-24 --end 2026-06-25
+```
+
+```bash
+# Strava — autorização inicial (uma vez, abre o navegador)
+.venv/bin/python scripts/authorize_strava.py
+
+# Strava — sincronização incremental (o padrão busca só o que falta)
+.venv/bin/python scripts/sync_strava.py
+.venv/bin/python scripts/sync_strava.py --days 90
+.venv/bin/python scripts/sync_strava.py --check        # só valida a credencial
+.venv/bin/python scripts/sync_strava.py --dry-run      # lista sem gravar
+```
+
+**Strava:** o refresh token **rotaciona a cada renovação** — o antigo morre. Por isso
+os tokens vivem em `~/.velodna/strava_token.json` (gravado atomicamente antes de o
+access token ser devolvido), e não no `.env`, que só serve de semente. O `.env` guarda
+apenas `STRAVA_CLIENT_ID` e `STRAVA_CLIENT_SECRET`.
+
+O acervo já tem as mesmas pedaladas vindas dos `.fit`. O sync casa por horário de
+início (±5 min) e **anota o `strava_id` no registro existente** em vez de inserir
+cópia — duplicar envenenaria o PMC, contando o TSS de cada dia em dobro. Rate limit:
+100 requisições / 15 min e 1.000 / dia; ao receber 429 o cliente dorme até a virada
+da janela. Depois de sincronizar, rode `recompute_metrics.py`.
+
+**Garmin:** o backfill longo leva ~1 s por dia e o Garmin bloqueia por IP (429).
+A sessão é persistida em `~/.garminconnect` para evitar relogar. O script só busca
+dias ausentes, então pode rodar em lotes.
+
+Etapas de `recompute_metrics.py`, na ordem de dependência:
+`curves` (MMP por atividade) → `metrics` (NP/VI/EF/decoupling, independem de FTP) →
+`ftp` (histórico de eFTP a partir das curvas) → `load` (IF/TSS com o FTP da época + HRSS) →
+`calibrate` (ajusta a âncora de FC comparando HRSS com TSS de potência, e reprocessa) →
+`zones` (materializa as zonas por ponto de FTP) → `pmc` (série de CTL/ATL/TSB).
+O ciclo completo leva ~40 s para 1.470 atividades.
+
+**DuckDB aceita um único escritor.** Um backfill longo que segure a conexão bloqueia
+qualquer outro processo — por isso `sync_garmin_health.py` grava em lotes (`--batch`),
+abrindo e fechando a conexão a cada lote.
+
 ### Iniciar serviços
 
 ```bash
-# API (porta 8000)
-uvicorn src.api.main:app --reload
+# API (porta 8006, conforme o mapa de portas do monorepo)
+DB_PATH=data/velodna.duckdb .venv/bin/uvicorn api.main:app --port 8006 --app-dir src --reload
 
-# Frontend React (porta 5173)
+# Frontend React (porta 5176; proxeia /api para 8006)
 cd frontend && npm run dev
 
 # Airflow + MLflow: o docker-compose ficava no .devcontainer (removido na migração local).
@@ -49,27 +149,45 @@ cd frontend && npm run dev
 
 ```
 src/
-  ingestion/       ← fit_parser, gpx_loader, garmin_health_client, strava_client, pipeline
-  storage/         ← CatalogStore autoritativo (DuckDB DDL + CRUD)
-  analytics/       ← PMCCalculator, PowerCurveEngine, ZoneAnalyzer, WPrimeModel, FTPDetector, VeloDNATracker (MLflow)
-  api/             ← FastAPI app + 5 routers (activities, analytics, health, routes, coach)
+  ingestion/       ← fit_parser, gpx_loader, garmin_health_client, pipeline,
+                      strava_auth (OAuth + rotação), strava_client, strava_sync (dedupe)
+  storage/         ← CatalogStore (DuckDB DDL + CRUD), models (Activity/ActivityStream),
+                      query (rows/row — nomes de coluna do resultado, não da conexão)
+  analytics/       ← timeseries (base), power_metrics (NP/IF/VI/EF), hr_metrics (HRSS/TRIMP/
+                      decoupling), ftp_history (eFTP), critical_power (CP/W'),
+                      zones (Coggan, derivadas do limiar vigente),
+                      intervals (detecção de blocos), durability (fadiga-resistência),
+                      weekly (semana executada + polarização),
+                      PMCCalculator, PowerCurveEngine, WPrimeModel (Skiba),
+                      VeloDNATracker (MLflow)
+planning/          ← projection (PMC para frente), calendar (planejado x realizado)
+  api/             ← FastAPI app + 9 routers (activities, analytics, fitness, planning,
+                      health, routes, segments, training, export, coach)
   routes/          ← GPXAnalyzer, SegmentClassifier, PacingStrategy, TimeEstimator
   health/          ← SleepCorrelator, HRVTrendAnalyzer, ReadinessCalculator
   ai/              ← OllamaClient, ContextBuilder, PostActivityCoach, WeeklyPlanCoach
-frontend/
-  src/
-    App.jsx                      ← layout com 3 abas: Visão Geral / Atividade / Coach
-    components/
-      ReadinessCard.jsx          ← score de recuperação diário (GET /readiness/today)
-      PMCChart.jsx               ← CTL/ATL/TSB histórico (GET /pmc)
-      PowerCurveChart.jsx        ← curva MMP (GET /power-curve)
-      ActivityList.jsx           ← lista clicável de atividades (GET /activities)
-      RouteMap.jsx               ← mapa GPS dinâmico (GET /activities/{id}/streams)
-      ZoneChart.jsx              ← zonas de potência Coggan (GET /activities/{id}/zones)
-      HRVTrendCard.jsx           ← tendência HRV 30 dias (GET /health-daily)
-      CoachPanel.jsx             ← insight pós-atividade via Ollama (POST /coach/analyze-activity)
+frontend/                        ← reescrito na v2.0.0; os componentes antigos foram
+  src/                             removidos (referenciavam campos do schema legado)
+    App.jsx                      ← casca: navegação e alternador de tema
+    styles/tokens.css            ← tokens de design; paleta validada nos dois temas
+    lib/
+      api.js                     ← único lugar que conhece endpoints e campos
+      format.js                  ← formatadores pt-BR
+      useCssVar.js               ← lê tokens CSS (o Recharts precisa de string, não var())
+    components/viz/              ← ChartFrame, Tooltip, StatTile
+    components/fitness/          ← PMCChart, PowerCurveChart, FTPHistoryChart,
+                                   EfficiencyChart
+    components/health/           ← ReadinessHero, HRVChart, WellnessChart
+    components/activity/         ← ActivityPicker, ActivityDetail, ActivityCompare
+    components/planning/         ← CalendarGrid, ProjectionPanel
+    components/training/         ← IntensityBar, WeekLoadChart, WBalChart/WBalPanel,
+                                   IntervalPanel, DurabilityPanel
+    views/                       ← TodayView, WeekView, FitnessView, ActivityView,
+                                   PlanningView, SegmentsView, CoachView
+
+Sete visões, todas ligadas ao backend real.
 tests/
-  unit/            ← 17 arquivos de teste (84 casos)
+  unit/            ← 22 arquivos de teste (338 casos)
   integration/     ← pipeline end-to-end
   fixtures/        ← sample.fit, sample.gpx, sample_invalid.fit
 dags/
@@ -98,30 +216,67 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/activities/latest` | Atividade mais recente |
 | GET | `/activities/{id}/streams` | Streams GPS decimados (`every_n`) |
 | GET | `/activities/{id}/zones` | Distribuição por zona de potência Coggan |
+| GET | `/activities/{id}/power-curve` | Curva MMP de uma única atividade (comparação) |
 | POST | `/activities/ingest/fit` | Upload .FIT → persiste + recalcula PMC |
 | GET | `/pmc` | Série histórica CTL/ATL/TSB |
-| GET | `/power-curve` | Curva MMP ordenada por duração |
+| GET | `/power-curve` | Curva MMP agregada (`start`, `end`, `sport`) |
+| GET | `/critical-power` | Ajuste de CP e W' na janela (`days`, `sport`) |
+| GET | `/ftp-history` | Evolução do FTP, com origem (teste / manual / estimado) |
 | GET | `/health-daily` | Últimos N registros de saúde Garmin |
 | GET | `/readiness/today` | Score de recuperação do dia |
+| GET | `/efficiency` | Série de Efficiency Factor e decoupling |
+| GET | `/decoupling` | Deriva cardíaca nos treinos longos |
+| GET | `/zones/definitions` | Zonas de potência e FC vigentes numa data |
+| GET | `/activities/{id}/zone-distribution` | Tempo em zona (potência + FC) |
+| GET | `/week` | Semana executada (seg–dom): volume, aderência, polarização |
+| GET | `/weeks` | Série das últimas N semanas |
+| GET | `/activities/{id}/intervals` | Blocos de esforço detectados, agrupados em séries |
+| GET | `/activities/{id}/wbal` | Balanço de W' ao longo da atividade (Skiba) |
+| GET | `/activities/{id}/durability` | Potência e EF antes/depois de X kJ acumulados |
+| GET | `/calendar` | Planejado x realizado, dia a dia |
+| POST | `/planning/workouts` | Cria treino planejado |
+| POST | `/planning/reconcile` | Liga planejado à atividade executada |
+| POST | `/planning/projection` | Projeta CTL/TSB por carga semanal ou CTL alvo |
+| POST | `/planning/projection/from-plan` | Projeta a partir do calendário |
 | POST | `/routes/analyze` | Upload GPX → perfil de elevação |
 | POST | `/coach/analyze-activity` | Análise de atividade via Ollama |
+| POST | `/coach/chat` | Chat livre com contexto do atleta (US-14) |
+| GET | `/coach/chat/{session_id}` | Histórico de uma conversa |
+| GET | `/coach/chat-sessions` | Sessões de conversa |
+| GET | `/segments` | Segmentos pessoais com resumo das passagens |
+| POST | `/segments` | Cria segmento a partir de trecho de atividade |
+| POST | `/segments/{id}/rescan` | Reprocessa o histórico à procura de passagens |
+| GET | `/segments/{id}/efforts` | Histórico de passagens, ordenado por tempo |
+| GET | `/health/sleep-correlation` | Correlação recuperação × performance com n e p (US-12) |
+| GET | `/export/activities.csv` | Resumo das atividades em CSV (US-05) |
+| GET | `/export/training-load.csv` | Série de CTL/ATL/TSB em CSV |
+| GET | `/export/health.csv` | Métricas diárias de saúde em CSV |
+| GET | `/export/power-curve.csv` | Curva de potência em CSV |
+| GET | `/export/activities/{id}/streams.csv` | Série temporal completa em CSV |
 
 ---
 
 ## Schema do banco (DuckDB)
 
-Tabelas principais — ver `docs/schema.sql` e `src/storage/catalog_store.py` para DDL completo:
+DDL completo em `src/storage/catalog_store.py` (`_DDL`). Chaves são UUID.
 
 - `athletes` — perfil do atleta (FTP, peso, FC max)
-- `activities` — resumo de cada atividade (TSS, NP, IF, distância, elevação)
-- `activity_streams` — série temporal por atividade (power, HR, cadência, GPS, altitude)
-- `health_daily` — métricas diárias Garmin (HRV, sono, FC repouso, body battery)
-- `athlete_metrics` — CTL / ATL / TSB / ftp_w por data
-- `power_curve` — melhores potências por duração (MMP)
-- `routes` — rotas GPX analisadas
-- `route_segments` — segmentos de 500 m de cada rota
+- `activities` — resumo por atividade: `normalized_power_w`, `intensity_factor`,
+  `variability_index`, `efficiency_factor`, `decoupling_pct`, `tss`, `tss_source`
+  (`power`/`hr`), `hrss`, `ftp_w_at_time`, `moving_time_s`
+- `activity_streams` — série temporal com `time_s` relativo ao início (power, hr_bpm,
+  cadência, GPS, altitude)
+- `health_metrics` — métricas diárias Garmin (HRV, sono, FC repouso, body battery, VO2max)
+- `training_load` — CTL / ATL / TSB / `daily_tss` por data, série diária **contínua**
+- `ftp_history` — evolução do eFTP (`effective_from`, `ftp_w`, `method`)
+- `power_curves` — melhores potências por duração, por atividade (MMP)
+- `power_zones` / `hr_zones` — zonas com `effective_from`
+- `routes` + `route_waypoints` + `route_segments` — rotas GPX e perfil de elevação
 - `segments` + `segment_efforts` — segmentos pessoais e histórico de passagens
 - `ai_conversations` + `ai_insights` — histórico do AI Coach
+
+**Um atleta por instalação:** `CatalogStore.resolve_athlete_id()` é o único ponto que
+faz a ponte entre a plataforma single-user e o schema multi-atleta.
 
 ---
 
@@ -133,7 +288,9 @@ Tabelas principais — ver `docs/schema.sql` e `src/storage/catalog_store.py` pa
 | Parser FIT | `src/ingestion/fit_parser.py` | ✅ Completo |
 | Loader GPX | `src/ingestion/gpx_loader.py` | ✅ Completo |
 | Cliente Garmin | `src/ingestion/garmin_health_client.py` | ✅ Completo |
-| Cliente Strava | `src/ingestion/strava_client.py` | ✅ Esqueleto |
+| Cliente Strava | `src/ingestion/strava_client.py` | ✅ Completo (paginação + rate limit) |
+| OAuth Strava | `src/ingestion/strava_auth.py` | ✅ Completo (rotação persistida) |
+| Sync Strava | `src/ingestion/strava_sync.py` + `scripts/sync_strava.py` | ✅ Completo (dedupe) |
 | Pipeline de ingestão | `src/ingestion/pipeline.py` | ✅ Completo |
 | PMC Calculator (CTL/ATL/TSB) | `src/analytics/pmc_calculator.py` | ✅ Completo |
 | Power Curve Engine | `src/analytics/power_curve_engine.py` | ✅ Completo |
@@ -156,12 +313,21 @@ Tabelas principais — ver `docs/schema.sql` e `src/storage/catalog_store.py` pa
 | Frontend React (8 componentes) | `frontend/src/` | ✅ Completo |
 | Airflow DAGs | `dags/` | ✅ Completo |
 | dbt models | `dbt/models/` | ✅ Completo |
-| US-04 Comparação de atividades | — | ⏳ Pendente |
-| US-05 Exportação CSV | — | ⏳ Pendente |
-| US-07/08 Segmentos pessoais | — | ⏳ Pendente |
-| US-12 Correlação sono/performance | — | ⏳ Pendente |
+| Zonas de potência e FC | `src/analytics/zones.py` | ✅ Completo |
+| Modelo CP/W' | `src/analytics/critical_power.py` | ✅ Completo |
+| Detecção de intervalos | `src/analytics/intervals.py` | ✅ Completo |
+| Durabilidade | `src/analytics/durability.py` | ✅ Completo |
+| Semana executada + polarização | `src/analytics/weekly.py` | ✅ Completo |
+| W'bal (Skiba, ciente de pausas) | `src/analytics/wprime_model.py` | ✅ Completo |
+| Projeção de carga | `src/planning/projection.py` | ✅ Completo |
+| Calendário planejado x realizado | `src/planning/calendar.py` | ✅ Completo |
+| Garmin health (real) | `src/ingestion/garmin_health_client.py` | ✅ Completo |
+| US-04 Comparação de atividades | `frontend/src/components/activity/ActivityCompare.jsx` | ✅ Completo |
+| US-05 Exportação CSV | `src/api/routers/export_router.py` (5 exportações) | ✅ Completo |
+| US-07/08 Segmentos pessoais | `src/routes/segment_matcher.py` + `/segments` | ✅ Completo |
+| US-12 Correlação sono/performance | `src/health/sleep_correlator.py` + `GET /health/sleep-correlation` | ✅ Completo |
 | US-13 Alerta overreaching | `src/health/overreaching_alerts.py` + `GET /health/alerts` | ✅ Completo |
-| US-14 Chat livre com coach | — | ⏳ Pendente |
+| US-14 Chat livre com coach | `src/ai/chat_coach.py` + `POST /coach/chat` | ✅ Completo |
 | US-16 Periodização semanal | `POST /coach/weekly-plan` | ✅ Completo |
 | US-17 Nutrição para treinos longos | `POST /coach/nutrition-advice` | ✅ Completo |
 | US-18 Risco de lesão | `src/ai/injury_risk_coach.py` + `POST /coach/assess-injury-risk` + DAG semanal | ✅ Completo |
@@ -202,9 +368,52 @@ Tabelas principais — ver `docs/schema.sql` e `src/storage/catalog_store.py` pa
 
 ## Contexto importante
 
-- **CatalogStore autoritativo:** `src/storage/catalog_store.py` — nunca usar o duplicado em `src/ingestion/catalog_store.py` (artefato de fase anterior; mantido por compatibilidade com testes de ingestão)
+- **CatalogStore único:** `src/storage/catalog_store.py`. O duplicado em `src/ingestion/` foi
+  removido na v2.0.0 — era ele que continha os dados, enquanto o de `storage/` estava morto e
+  quebrado (importava campos inexistentes). O schema de `storage/` venceu por ser melhor
+  modelado; os dados foram migrados via `scripts/migrate_to_storage_schema.py`.
+- **Modelo de domínio:** `src/storage/models.py` — `Activity`/`ActivityStream` com tempo
+  relativo (`time_s`). O `ingestion/fit_parser.py` devolve um DTO cru com timestamp absoluto;
+  `activity_from_fit()` faz a ponte. Não misturar os dois.
+- **Imports sem prefixo `src.`:** o pacote é publicado com `where = ["src"]`, então
+  `from storage.catalog_store import ...`. Misturar `src.storage` e `storage` cria duas
+  instâncias distintas do mesmo módulo.
+- **Pausas nas séries temporais:** nunca tratar streams como array contíguo. Usar
+  `analytics/timeseries.load_series()`, que separa a atividade em segmentos contínuos.
+  Janelas móveis (NP, MMP, decoupling) não podem atravessar uma pausa.
 - **Airflow 3.x:** usar `schedule=` (não `schedule_interval=`) e `airflow.providers.standard.operators.python.PythonOperator`
-- **MLflow FutureWarning:** backend `FileStore` foi depreciado em fev/2026 — não afeta funcionamento, mas migrar para SQLite em produção
+- **MLflow:** o backend `FileStore` deixou de ser aviso e passou a erro fatal — o tracking
+  usa SQLite (`MLFLOW_TRACKING_URI=sqlite:///mlflow/mlflow.db`)
+- **Artefatos de sensor:** o histórico tem picos de 3609 W e 239 bpm. `timeseries.PLAUSIBLE_RANGE`
+  descarta valores fora da faixa fisiológica antes de qualquer cálculo
+- **Nunca ler `db.description` depois do `execute`:** o atributo pertence à conexão e reflete o
+  último comando executado nela. Com requisições concorrentes, um endpoint monta a resposta com
+  os nomes de coluna de outro — silenciosamente. Usar `api/query.py` (`rows`/`row`), que lê do
+  objeto de resultado. `get_db()` também devolve um `cursor()` por requisição, não a conexão
+  compartilhada
+- **Cores dos gráficos vêm dos tokens CSS**, lidos via `useCssVar`. A paleta foi validada como
+  conjunto (separação para daltonismo, faixa de luminosidade, contraste) nos dois temas — não
+  trocar um hex isolado
+- **Timestamps de FIT são UTC.** `fitparse` devolve naive; `ingestion.fit_parser._as_utc`
+  rotula antes de persistir. Nunca gravar datetime sem fuso numa coluna `TIMESTAMPTZ` —
+  o DuckDB presume o fuso da máquina e o erro é silencioso
+- **Dedupe do Strava:** `upsert_activity` só deduplica por `garmin_id`. O sync do
+  Strava usa `find_activity_near()` (±5 min no horário de início) para casar com o
+  que veio dos `.fit` e chama `attach_strava_id()`. Nunca inserir direto o que o
+  Strava devolve sem passar por esse casamento
+- **NP/IF/VI/TSS não vêm do Strava.** O `weighted_average_watts` deles usa regra
+  própria que ignora pausas. O sync deixa os campos vazios e `recompute_metrics.py`
+  calcula tudo sob o mesmo critério
+- **Detecção de intervalos acha terreno, não só treino.** Num pedal de montanha cada
+  subida vira um bloco; o `IntervalPanel` só exibe "séries" quando há repetição real
+  (`count > 1`), para não inventar prescrição onde houve só relevo. O limiar padrão
+  (0,88 × FTP) é ajustável por query param
+- **Durabilidade pode ser inconclusiva, e isso é resposta.** Sem `MIN_SIDE_DURATION_S`
+  de cada lado do corte de kJ, devolve `is_conclusive: false` — um veredito calculado
+  sobre 20 min de pedal pareceria informação sem ser
+- **`storage/query.py` é o helper canônico** de `rows`/`row`. `api/query.py` apenas
+  reexporta. Qualquer camada que monte dicionário a partir de `execute` deve usá-lo —
+  `planning/calendar.py` lia `conn.description` e foi corrigido na v2.1.0
 - Arquivos `.fit` e `.gpx` ficam em `data/fit/` e `data/gpx/`
 - O banco `velodna.duckdb` fica em `data/` — nunca commitado
 - **RouteMap:** usa `GET /activities/{id}/streams?every_n=6` — streams decimados para performance no mapa

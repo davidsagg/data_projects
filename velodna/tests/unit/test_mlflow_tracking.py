@@ -6,7 +6,9 @@ from pathlib import Path
 
 @pytest.fixture(autouse=True)
 def mlenv(tmp_path):
-    mlflow.set_tracking_uri(f"file://{tmp_path}/mlruns")
+    # O backend de arquivos foi bloqueado pelo MLflow; SQLite é o caminho suportado.
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    mlflow.set_registry_uri(f"sqlite:///{tmp_path}/mlflow.db")
     yield
     mlflow.end_run()
 

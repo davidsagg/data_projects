@@ -6,6 +6,12 @@ __pycache__/
 data/fit/
 data/gpx/
 data/processed/
+data/exports/
+data/new_activities/
+# Banco, WAL e backups. O glob precisa do sufixo aberto: `*.duckdb` sozinho não
+# cobre `velodna.duckdb.wal` nem `velodna.duckdb.bak-20260913-221533`, e um
+# backup de 283 MB entrando num `git add .` é difícil de tirar depois.
 *.duckdb
+*.duckdb.*
 mlruns/
 .DS_Store

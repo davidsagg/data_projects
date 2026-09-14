@@ -1,19 +1,20 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
-from src.ai.ollama_client import OllamaClient, OllamaUnavailableError
-from src.ai.context_builder import ContextBuilder
-from src.ai.post_activity_coach import PostActivityCoach, CoachResponse
-from src.ai.weekly_plan_coach import WeeklyPlanCoach
-from src.ingestion.fit_parser import Activity
+from ai.ollama_client import OllamaClient, OllamaUnavailableError
+from ai.context_builder import ContextBuilder
+from ai.post_activity_coach import PostActivityCoach, CoachResponse
+from ai.weekly_plan_coach import WeeklyPlanCoach
+from storage.models import Activity
 
 MOCK_RESP = {"model": "llama3", "response": "Ótimo treino! Potência consistente.", "done": True}
 
 
 def act():
-    return Activity(garmin_id="r1", sport_type="cycling",
-                    start_time=datetime(2024, 1, 15, 8, tzinfo=timezone.utc),
-                    duration_s=3600, distance_m=40000, elevation_m=400, avg_power_w=250.0)
+    return Activity(source="fit", garmin_id="r1", sport_type="cycling",
+                    started_at=datetime(2024, 1, 15, 8, tzinfo=timezone.utc),
+                    elapsed_time_s=3600, distance_m=40000, elevation_gain_m=400,
+                    avg_power_w=250.0)
 
 
 def _mock_post(rv=MOCK_RESP):

@@ -18,9 +18,9 @@ def parse(**ctx):
     import duckdb
     import os
     from pathlib import Path
-    from src.ingestion.pipeline import IngestionPipeline
-    from src.ingestion.catalog_store import CatalogStore
-    conn = duckdb.connect(os.getenv("DB_PATH", "/workspace/data/velodna.duckdb"))
+    from ingestion.pipeline import IngestionPipeline
+    from storage.catalog_store import CatalogStore
+    conn = duckdb.connect(os.getenv("DB_PATH", "data/velodna.duckdb"))
     CatalogStore(conn).initialize_schema()
     p = IngestionPipeline(conn)
     for f in files:
@@ -34,9 +34,9 @@ def update(**ctx):
     import duckdb
     import os
     from datetime import date
-    from src.ingestion.catalog_store import CatalogStore
-    from src.analytics.pmc_calculator import PMCCalculator
-    conn = duckdb.connect(os.getenv("DB_PATH", "/workspace/data/velodna.duckdb"))
+    from storage.catalog_store import CatalogStore
+    from analytics.pmc_calculator import PMCCalculator
+    conn = duckdb.connect(os.getenv("DB_PATH", "data/velodna.duckdb"))
     PMCCalculator().run_and_store(CatalogStore(conn), date.today())
 
 
