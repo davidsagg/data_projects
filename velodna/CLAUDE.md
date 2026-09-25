@@ -2,7 +2,28 @@
 
 Plataforma local de performance ciclística. Privacidade-first: dados de saúde e treino nunca saem do dispositivo.
 
-**Versão atual:** v2.1.0 · **Testes:** 340 passando
+**Versão atual:** v2.3.0 · **Testes:** 428 passando
+
+> **v2.3.0 (2026-09-25)** — quatro análises do workflow do post da augo: subidas
+> com VAM, execução por quartos, densidade carga interna × externa e perfil de
+> capacidade (forças e limitadores contra o próprio recorde).
+>
+> **Bug de ingestão corrigido.** O `fit_parser` lia `altitude` e `speed`; os
+> dispositivos Garmin modernos gravam `enhanced_altitude`/`enhanced_speed` e
+> omitem os clássicos. 192 atividades estavam sem altitude e sem velocidade nos
+> streams — invisível porque o resumo mostrava a elevação certa (vem da mensagem
+> `session`, não dos records). Só apareceu quando a detecção de subidas devolveu
+> zero subidas num pedal de 1.570 m. Recuperado com
+> `scripts/backfill_stream_channels.py`; cobertura de altitude entre atividades
+> com GPS: 593/594.
+
+> **v2.2.0 (2026-09-24)** — camada de feedback subjetivo (RPE, sensação, notas,
+> inclusive em dia sem treino) e **servidor MCP somente-leitura** que expõe o
+> acervo a um cliente de IA. Ideia vinda do post do Marco Altini sobre o conector
+> da augo: o valor não está num assistente embutido, e sim em expor a camada de
+> dados para construir as próprias análises. Também: redesign do frontend sobre
+> `velodna_design_benchmark_v2.md` — timeline unificada treino × saúde, `/week`
+> como tela principal, navegação em funil.
 
 > **v2.1.0 (2026-09-13)** — integração com o Strava (OAuth com rotação de token,
 > sync incremental e dedupe contra o acervo `.fit`), visão da semana executada com
@@ -116,6 +137,26 @@ O ciclo completo leva ~40 s para 1.470 atividades.
 qualquer outro processo — por isso `sync_garmin_health.py` grava em lotes (`--batch`),
 abrindo e fechando a conexão a cada lote.
 
+### Servidor MCP
+
+```bash
+make api          # noutro terminal — o MCP fala HTTP com ela
+make mcp          # servidor em stdio
+```
+
+Já configurado em `.mcp.json`, então o Claude Code no diretório do projeto o
+carrega sozinho. 14 ferramentas: perfil do atleta, semana, série de semanas,
+atividades, análise completa de atividade, W'bal, carga, curva de potência,
+histórico de FTP, eficiência, saúde, feedback subjetivo, insights e segmentos.
+
+**Fala HTTP com a API, nunca com o DuckDB.** Não é preferência de estilo: o banco
+aceita um escritor só, e com a API de pé nem `duckdb.connect(read_only=True)`
+consegue abrir o arquivo. Um MCP que tocasse o banco direto brigaria com a API
+justamente quando os dois precisam rodar juntos.
+
+**Somente leitura, por decisão.** `tests/unit/test_mcp_server.py` tem um teste que
+falha se alguém acrescentar uma ferramenta com verbo de escrita no nome.
+
 ### Iniciar serviços
 
 ```bash
@@ -157,10 +198,13 @@ src/
                       decoupling), ftp_history (eFTP), critical_power (CP/W'),
                       zones (Coggan, derivadas do limiar vigente),
                       intervals (detecção de blocos), durability (fadiga-resistência),
+                      climbs (detecção + VAM), pacing_analysis (quartos + densidade),
+                      capacity (forças e limitadores),
                       weekly (semana executada + polarização),
                       PMCCalculator, PowerCurveEngine, WPrimeModel (Skiba),
                       VeloDNATracker (MLflow)
 planning/          ← projection (PMC para frente), calendar (planejado x realizado)
+  mcp_server/      ← servidor MCP (stdio) sobre a API — somente leitura
   api/             ← FastAPI app + 9 routers (activities, analytics, fitness, planning,
                       health, routes, segments, training, export, coach)
   routes/          ← GPXAnalyzer, SegmentClassifier, PacingStrategy, TimeEstimator
@@ -233,6 +277,14 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/activities/{id}/intervals` | Blocos de esforço detectados, agrupados em séries |
 | GET | `/activities/{id}/wbal` | Balanço de W' ao longo da atividade (Skiba) |
 | GET | `/activities/{id}/durability` | Potência e EF antes/depois de X kJ acumulados |
+| GET | `/activities/{id}/climbs` | Subidas com VAM, inclinação e potência |
+| GET | `/activities/{id}/pacing` | Distribuição de intensidade por quarto do esforço |
+| GET | `/activities/{id}/load-density` | Densidade potência × FC |
+| GET | `/capacity-profile` | Forças e limitadores por duração |
+| GET | `/feedback` | Feedback subjetivo do período |
+| GET | `/activities/{id}/feedback` | Feedback de uma atividade |
+| PUT | `/feedback` | Grava/atualiza feedback (idempotente por atleta+data+atividade) |
+| DELETE | `/feedback/{id}` | Remove um feedback |
 | GET | `/calendar` | Planejado x realizado, dia a dia |
 | POST | `/planning/workouts` | Cria treino planejado |
 | POST | `/planning/reconcile` | Liga planejado à atividade executada |
@@ -273,6 +325,9 @@ DDL completo em `src/storage/catalog_store.py` (`_DDL`). Chaves são UUID.
 - `power_zones` / `hr_zones` — zonas com `effective_from`
 - `routes` + `route_waypoints` + `route_segments` — rotas GPX e perfil de elevação
 - `segments` + `segment_efforts` — segmentos pessoais e histórico de passagens
+- `activity_feedback` — RPE (Borg 1–10), sensação (1–5), notas. `activity_id`
+  **opcional**: nulo é a nota do dia, que é como um dia de descanso entra no
+  registro e explica o treino seguinte
 - `ai_conversations` + `ai_insights` — histórico do AI Coach
 
 **Um atleta por instalação:** `CatalogStore.resolve_athlete_id()` é o único ponto que
@@ -394,6 +449,19 @@ faz a ponte entre a plataforma single-user e o schema multi-atleta.
 - **Cores dos gráficos vêm dos tokens CSS**, lidos via `useCssVar`. A paleta foi validada como
   conjunto (separação para daltonismo, faixa de luminosidade, contraste) nos dois temas — não
   trocar um hex isolado
+- **O feedback subjetivo é a única fonte não medida do acervo.** Tudo o mais vem
+  de sensor. É ele que explica o treino fraco com HRV normal e sono bom — sem
+  ele, o outlier fica sem causa. `upsert_feedback` preserva campos omitidos: quem
+  grava só o RPE depois não apaga a nota escrita antes
+- **Campos `enhanced_*` do FIT.** Garmin moderno grava `enhanced_altitude` e
+  `enhanced_speed` e **omite** os clássicos. `_first_value` tenta o enhanced e cai
+  para o antigo. Erro desse tipo é silencioso: o resumo da atividade vem da
+  mensagem `session`, então a elevação continua certa enquanto os streams estão
+  vazios — só uma análise que dependa do stream acusa
+- **Suavizar série com `np.convolve(mode="same")` zera as bordas.** Numa série de
+  altitude que começa a 722 m, isso fabricava uma subida fantasma de 384 m a 100%
+  de inclinação. Usar padding de borda (`np.pad(mode="edge")`), como em
+  `intervals._smooth` e `climbs._smooth`
 - **Timestamps de FIT são UTC.** `fitparse` devolve naive; `ingestion.fit_parser._as_utc`
   rotula antes de persistir. Nunca gravar datetime sem fuso numa coluna `TIMESTAMPTZ` —
   o DuckDB presume o fuso da máquina e o erro é silencioso

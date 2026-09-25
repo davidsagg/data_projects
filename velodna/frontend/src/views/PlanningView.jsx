@@ -60,7 +60,7 @@ export default function PlanningView() {
   }
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
+    <div className="page">
       <ProjectionPanel />
 
       {calendar ? <CalendarGrid calendar={calendar} /> : <p className="muted">Carregando…</p>}

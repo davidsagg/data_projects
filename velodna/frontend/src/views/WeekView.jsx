@@ -1,226 +1,262 @@
 /*
- * Visão Semana — o bloco de sete dias como ele realmente aconteceu.
+ * Visão Semana — a tela principal do produto.
  *
- * A semana é a unidade de periodização do ciclismo, e até aqui o projeto só a
- * tinha como uma soma de sete dias corridos calculada no cliente. Esta visão a
- * trata como o objeto que é: segunda a domingo, com volume, aderência ao plano,
- * distribuição de intensidade e a comparação com o que veio antes.
+ * Responde a uma pergunta só: "como foi minha semana e como meu corpo
+ * respondeu?". Quatro blocos, na ordem em que a pergunta se desdobra:
  *
- * Ordem de leitura: primeiro o que foi feito (volume e carga), depois como foi
- * feito (intensidade), depois a tendência (semanas anteriores) e por fim o
- * detalhe sessão a sessão.
+ *   1. O número protagonista — a carga da semana, com o delta que lhe dá escala
+ *   2. A timeline unificada — treino e saúde no mesmo eixo
+ *   3. Como a carga se distribuiu em intensidade
+ *   4. Se esta semana é normal para este atleta
+ *
+ * O drill-down de um dia abre em drawer, sem sair da tela: o contexto da semana
+ * é o que dá sentido ao dia, e tapá-lo com um modal perderia exatamente isso.
  */
 import { useEffect, useState } from "react"
 
-import IntensityBar from "../components/training/IntensityBar"
-import WeekLoadChart from "../components/training/WeekLoadChart"
-import ChartFrame from "../components/viz/ChartFrame"
-import StatTile from "../components/viz/StatTile"
+import WeekTimeline from "../components/week/WeekTimeline"
+import WeekTrend from "../components/week/WeekTrend"
+import ZoneBars from "../components/week/ZoneBars"
+import DayDrawer from "../components/week/DayDrawer"
+import HeroNumber from "../components/viz/HeroNumber"
+import ErrorState from "../components/viz/ErrorState"
 import { api } from "../lib/api"
-import { duration, fullDate, num, shortDate, watts } from "../lib/format"
+import { duration, fullDate, num, shortDate } from "../lib/format"
 
-/** Deslocamento em semanas aplicado à data de hoje. */
+const TREND_WEEKS = 8
+
+/** Data de referência deslocada em N semanas a partir de hoje. */
 function referenceFor(offset) {
   const date = new Date()
   date.setDate(date.getDate() + offset * 7)
   return date.toISOString().slice(0, 10)
 }
 
-/** Rótulo do seletor de semana. */
-function offsetLabel(offset) {
-  if (offset === 0) return "Esta semana"
-  if (offset === -1) return "Semana passada"
-  return `${Math.abs(offset)} semanas atrás`
+const DISTRIBUTION_HINT = {
+  polarizado: "muito fácil e muito forte, pouco no meio",
+  piramidal: "base larga, afinando conforme a intensidade sobe",
+  limiar: "concentrado em torno do limiar",
+  base: "só volume aeróbico, sem trabalho intenso",
 }
 
-export default function WeekView() {
+export default function WeekView({ onOpenActivity }) {
   const [offset, setOffset] = useState(0)
   const [state, setState] = useState({ loading: true })
+  const [attempt, setAttempt] = useState(0)
+  const [selectedDay, setSelectedDay] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     setState({ loading: true })
+    setSelectedDay(null)
 
     Promise.all([
       api.training.week({ reference: referenceFor(offset) }),
-      api.training.weeks({ weeks: 12, reference: referenceFor(offset) }),
+      api.training.weeks({ weeks: TREND_WEEKS, reference: referenceFor(offset) }),
     ])
-      .then(([week, weeks]) => {
-        if (!cancelled) setState({ loading: false, week, weeks })
-      })
-      .catch((error) => {
-        if (!cancelled) setState({ loading: false, error: String(error) })
-      })
+      .then(([week, weeks]) => !cancelled && setState({ loading: false, week, weeks }))
+      .catch((error) => !cancelled && setState({ loading: false, error }))
 
     return () => {
       cancelled = true
     }
-  }, [offset])
+  }, [offset, attempt])
 
-  if (state.loading) return <p className="muted">Carregando…</p>
+  if (state.loading) return <WeekSkeleton />
   if (state.error)
-    return <p style={{ color: "var(--status-critical)" }}>Erro: {state.error}</p>
+    return (
+      <ErrorState
+        error={state.error}
+        onRetry={() => setAttempt((n) => n + 1)}
+      />
+    )
 
   const week = state.week
   if (!week) return <p className="muted">Sem dados para esta semana.</p>
 
-  const compliance = week.compliance_pct
-  const change = week.tss_change_pct
+  const hasLoad = week.total_tss > 0
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-5)" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: "var(--space-3)",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: "var(--fs-lead)" }}>
-            {shortDate(week.week_start)} — {fullDate(week.week_end)}
-          </h1>
-          <p className="card-subtitle" style={{ margin: 0 }}>
-            {week.session_count} {week.session_count === 1 ? "sessão" : "sessões"} ·{" "}
-            {week.rest_days} {week.rest_days === 1 ? "dia" : "dias"} de descanso
-          </p>
-        </div>
-
-        <nav className="segmented" role="group" aria-label="Semana">
-          {[-3, -2, -1, 0].map((value) => (
-            <button
-              key={value}
-              aria-pressed={offset === value}
-              onClick={() => setOffset(value)}
-            >
-              {offsetLabel(value)}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <section
-        style={{
-          display: "grid",
-          gap: "var(--space-3)",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        }}
-      >
-        <StatTile
-          label="Carga"
-          value={num(week.total_tss, 0)}
-          unit="TSS"
-          hero
-          statusToken={
-            week.ramp_is_safe === false ? "--status-warning" : undefined
-          }
-          context={
-            change === null
-              ? "sem semana anterior para comparar"
-              : `${change > 0 ? "+" : ""}${num(change, 1)}% vs. semana anterior` +
-                (week.ramp_is_safe === false ? " — rampa acima do seguro" : "")
-          }
-        />
-        <StatTile
-          label="Tempo"
-          value={num(week.total_hours, 1)}
-          unit="h"
-          context={
-            week.baseline_tss
-              ? `média de 4 semanas: ${num(week.baseline_tss, 0)} TSS`
-              : undefined
-          }
-        />
-        <StatTile label="Distância" value={num(week.total_km, 0)} unit="km" />
-        <StatTile
-          label="Elevação"
-          value={num(week.total_elevation_m, 0)}
-          unit="m"
-        />
-        <StatTile
-          label="Aderência ao plano"
-          value={compliance === null ? "—" : num(compliance, 0)}
-          unit={compliance === null ? undefined : "%"}
-          statusToken={
-            compliance === null
-              ? undefined
-              : compliance >= 80
-                ? "--status-good"
-                : "--status-warning"
-          }
-          context={
-            compliance === null
-              ? "nenhum treino planejado"
-              : `${num(week.total_tss, 0)} de ${num(week.planned_tss, 0)} TSS planejados`
-          }
-        />
-      </section>
-
-      <ChartFrame
-        title="Distribuição de intensidade"
-        subtitle="Tempo em cada domínio, somando todas as sessões da semana"
-      >
-        <IntensityBar
-          intensity={week.intensity}
-          distribution={week.distribution}
-        />
-      </ChartFrame>
-
-      <WeekLoadChart weeks={state.weeks} />
-
-      <ChartFrame
-        title="Sessões da semana"
-        subtitle="Na ordem em que aconteceram"
-      >
-        {week.activities.length === 0 ? (
-          <p className="muted">Nenhuma atividade registrada.</p>
-        ) : (
-          <table
-            className="tabular"
-            style={{ width: "100%", fontSize: "var(--fs-small)" }}
+    <>
+      <div className="page">
+        {/* ── 1. Cabeçalho e número protagonista ───────────────────────── */}
+        <section className="section">
+          <header
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: "var(--space-5)",
+              flexWrap: "wrap",
+            }}
           >
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
-                <th style={{ fontWeight: 500 }}>Dia</th>
-                <th style={{ fontWeight: 500 }}>Esporte</th>
-                <th style={{ fontWeight: 500, textAlign: "right" }}>Duração</th>
-                <th style={{ fontWeight: 500, textAlign: "right" }}>Distância</th>
-                <th style={{ fontWeight: 500, textAlign: "right" }}>NP</th>
-                <th style={{ fontWeight: 500, textAlign: "right" }}>IF</th>
-                <th style={{ fontWeight: 500, textAlign: "right" }}>TSS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {week.activities.map((activity) => (
-                <tr
-                  key={activity.id}
-                  style={{ borderTop: "1px solid var(--border)" }}
-                >
-                  <td>{shortDate(activity.date)}</td>
-                  <td>{activity.sport_type}</td>
-                  <td style={{ textAlign: "right" }}>
-                    {duration(activity.moving_time_s || activity.elapsed_time_s)}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {activity.distance_m
-                      ? `${num(activity.distance_m / 1000, 1)} km`
-                      : "—"}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {watts(activity.normalized_power_w)}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {num(activity.intensity_factor, 2)}
-                  </td>
-                  <td style={{ textAlign: "right" }}>{num(activity.tss, 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </ChartFrame>
+            <h1
+              className="label"
+              style={{ margin: 0, fontSize: "var(--fs-micro)" }}
+            >
+              Semana {shortDate(week.week_start)} – {fullDate(week.week_end)}
+            </h1>
+
+            <nav className="segmented" role="group" aria-label="Navegar semanas">
+              <button onClick={() => setOffset((o) => o - 1)}>◀ anterior</button>
+              <button
+                onClick={() => setOffset((o) => Math.min(o + 1, 0))}
+                disabled={offset >= 0}
+                style={offset >= 0 ? { opacity: 0.4, cursor: "default" } : undefined}
+              >
+                próxima ▶
+              </button>
+            </nav>
+          </header>
+
+          <div style={{ padding: "var(--space-8) 0" }}>
+            <HeroNumber
+              value={num(week.total_tss, 0)}
+              label="TSS na semana"
+              delta={week.tss_change_pct}
+              deltaLabel="vs. semana anterior"
+              statusToken={
+                week.ramp_is_safe === false ? "--status-warning" : undefined
+              }
+              context={
+                hasLoad
+                  ? [
+                      `${duration(week.total_hours * 3600)} de treino`,
+                      `${num(week.total_km, 0)} km`,
+                      `${num(week.total_elevation_m, 0)} m de elevação`,
+                      week.avg_sleep_hours
+                        ? `média de ${formatSleep(week.avg_sleep_hours)} de sono`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join("  ·  ")
+                  : "Nenhuma atividade registrada nesta semana."
+              }
+            />
+            {week.ramp_is_safe === false && (
+              <p
+                style={{
+                  margin: "var(--space-4) 0 0",
+                  fontSize: "var(--fs-small)",
+                  color: "var(--status-warning)",
+                }}
+              >
+                Aumento acima de 15% — a faixa em que o risco de lesão sobe.
+              </p>
+            )}
+          </div>
+
+          <hr className="rule" />
+        </section>
+
+        {/* ── 2. Timeline unificada ────────────────────────────────────── */}
+        <section className="section">
+          <WeekTimeline days={week.days} onSelectDay={setSelectedDay} />
+        </section>
+
+        {/* ── 3 e 4. Intensidade e tendência ───────────────────────────── */}
+        <section
+          className="section"
+          style={{
+            gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)",
+            alignItems: "start",
+          }}
+        >
+          <div className="card card--static" style={{ display: "grid", gap: "var(--space-5)" }}>
+            <header>
+              <h2 className="card-title">Distribuição de intensidade</h2>
+              <p className="card-subtitle">
+                {week.distribution}
+                {DISTRIBUTION_HINT[week.distribution]
+                  ? ` — ${DISTRIBUTION_HINT[week.distribution]}`
+                  : ""}
+              </p>
+            </header>
+            <ZoneBars zoneSeconds={week.zone_seconds} />
+
+            {/* Resumo em três domínios — a leitura de polarização em números,
+                sem gastar um bloco a mais da tela. */}
+            {week.intensity?.easy && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "var(--space-8)",
+                  paddingTop: "var(--space-4)",
+                  borderTop: "1px solid var(--border-subtle)",
+                  fontSize: "var(--fs-small)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <span className="tabular">
+                  fácil {num(week.intensity.easy.pct, 1)}%
+                </span>
+                <span className="tabular">
+                  limiar {num(week.intensity.threshold.pct, 1)}%
+                </span>
+                <span className="tabular">
+                  forte {num(week.intensity.hard.pct, 1)}%
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="card card--static" style={{ display: "grid", gap: "var(--space-5)" }}>
+            <header>
+              <h2 className="card-title">{TREND_WEEKS} semanas</h2>
+              <p className="card-subtitle">
+                {week.baseline_tss
+                  ? `Base de 4 semanas: ${num(week.baseline_tss, 0)} TSS`
+                  : "Histórico recente de carga"}
+              </p>
+            </header>
+            <WeekTrend
+              weeks={state.weeks}
+              currentStart={week.week_start}
+              onSelectWeek={(target) => {
+                const diff = Math.round(
+                  (new Date(target.week_start) - new Date(week.week_start)) /
+                    (7 * 86400000),
+                )
+                setOffset((o) => o + diff)
+              }}
+            />
+          </div>
+        </section>
+      </div>
+
+      <DayDrawer
+        day={selectedDay}
+        activities={week.activities}
+        onClose={() => setSelectedDay(null)}
+        onOpenActivity={onOpenActivity}
+        onFeedbackSaved={() => setAttempt((n) => n + 1)}
+      />
+    </>
+  )
+}
+
+/** Skeleton — nunca spinner, conforme o checklist da spec. */
+function WeekSkeleton() {
+  return (
+    <div className="page" aria-busy="true">
+      <div className="section">
+        <div className="skeleton" style={{ height: 14, width: 220 }} />
+        <div className="skeleton" style={{ height: 64, width: 200 }} />
+        <div className="skeleton" style={{ height: 14, width: 420 }} />
+      </div>
+      <div className="skeleton" style={{ height: 380, borderRadius: "var(--radius)" }} />
+      <div
+        className="section"
+        style={{ gridTemplateColumns: "1.3fr 1fr" }}
+      >
+        <div className="skeleton" style={{ height: 260, borderRadius: "var(--radius)" }} />
+        <div className="skeleton" style={{ height: 260, borderRadius: "var(--radius)" }} />
+      </div>
     </div>
   )
+}
+
+function formatSleep(hours) {
+  const total = Math.round(hours * 60)
+  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`
 }

@@ -32,6 +32,11 @@ dependencies = [
     # HTTP client (used by stravalib / garminconnect)
     "httpx>=0.27",
     "requests>=2.32",
+
+    # Servidor MCP — expõe o acervo a um cliente de IA. Fala HTTP com a API
+    # local, nunca com o DuckDB: o banco aceita um escritor só, e com a API
+    # de pé nem uma conexão read_only abre o arquivo.
+    "mcp>=2.0",
 ]
 
 [project.optional-dependencies]

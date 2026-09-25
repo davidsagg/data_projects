@@ -7,12 +7,17 @@
  */
 import { useEffect, useState } from "react"
 
-import PMCChart from "../components/fitness/PMCChart"
+import FitnessChart from "../components/fitness/FitnessChart"
 import PowerCurveChart from "../components/fitness/PowerCurveChart"
 import FTPHistoryChart from "../components/fitness/FTPHistoryChart"
 import EfficiencyChart from "../components/fitness/EfficiencyChart"
+import CapacityProfile from "../components/fitness/CapacityProfile"
 import StatTile from "../components/viz/StatTile"
+import HRVChart from "../components/health/HRVChart"
+import WellnessChart from "../components/health/WellnessChart"
+import CorrelationPanel from "../components/health/CorrelationPanel"
 import ExportPanel from "../components/ExportPanel"
+import ErrorState from "../components/viz/ErrorState"
 import { api } from "../lib/api"
 import { formState, num } from "../lib/format"
 
@@ -29,13 +34,14 @@ export default function FitnessView({ athleteWeightKg }) {
       api.fitness.ftpHistory(),
       api.fitness.efficiency(),
       api.fitness.zones(),
+      api.health.daily(400),
     ])
-      .then(([pmc, curve, cp, ftpHistory, efficiency, zones]) => {
+      .then(([pmc, curve, cp, ftpHistory, efficiency, zones, health]) => {
         if (cancelled) return
-        setState({ loading: false, pmc, curve, cp, ftpHistory, efficiency, zones })
+        setState({ loading: false, pmc, curve, cp, ftpHistory, efficiency, zones, health })
       })
       .catch((error) => {
-        if (!cancelled) setState({ loading: false, error: String(error) })
+        if (!cancelled) setState({ loading: false, error })
       })
 
     return () => {
@@ -45,7 +51,7 @@ export default function FitnessView({ athleteWeightKg }) {
 
   if (state.loading) return <p className="muted">Carregando…</p>
   if (state.error)
-    return <p style={{ color: "var(--status-critical)" }}>Erro: {state.error}</p>
+    return <ErrorState error={state.error} />
 
   const latest = state.pmc?.[state.pmc.length - 1]
   const form = formState(latest?.tsb)
@@ -54,7 +60,7 @@ export default function FitnessView({ athleteWeightKg }) {
   const rampRate = computeRampRate(state.pmc)
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
+    <div className="page">
       <div
         style={{
           display: "grid",
@@ -88,7 +94,7 @@ export default function FitnessView({ athleteWeightKg }) {
         )}
       </div>
 
-      <PMCChart data={state.pmc} />
+      <FitnessChart pmc={state.pmc} health={state.health} />
 
       <div
         style={{
@@ -105,7 +111,17 @@ export default function FitnessView({ athleteWeightKg }) {
         <FTPHistoryChart history={state.ftpHistory} />
       </div>
 
+      <CapacityProfile />
+
       <EfficiencyChart activities={state.efficiency} />
+
+      {/* Tendências de saúde no mesmo horizonte de meses: é aqui que a leitura
+          lenta pertence, e mantê-las junto do PMC — em vez de numa aba "Saúde" —
+          é o que impede o produto de separar treino de corpo. */}
+      <HRVChart data={state.health} />
+      <WellnessChart data={state.health} />
+      <CorrelationPanel />
+
       <ExportPanel />
     </div>
   )

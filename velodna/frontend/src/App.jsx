@@ -1,29 +1,38 @@
 /*
  * Casca da aplicação — cabeçalho, navegação e alternância de tema.
  *
- * As demais visões (Hoje, Atividade, Planejamento) entram aqui conforme forem
- * construídas; a visão Fitness já usa o sistema de design completo.
+ * A navegação é um funil de zoom, não uma lista plana. Antes havia sete abas em
+ * que "Hoje", "Semana" e "Fitness" respondiam à mesma pergunta em horizontes
+ * diferentes, sem que a ordem dissesse isso — o usuário tinha de resolver a
+ * hierarquia na cabeça. Agora são dois grupos:
+ *
+ *   estado    Hoje → Semana → Fitness      (agora, sete dias, meses)
+ *   detalhe   Atividade · Segmentos · Plano · Coach
+ *
+ * A Semana é a tela de entrada: é onde mora a pergunta central do produto.
  */
 import { useEffect, useState } from "react"
 
-import FitnessView from "./views/FitnessView"
 import TodayView from "./views/TodayView"
 import WeekView from "./views/WeekView"
+import FitnessView from "./views/FitnessView"
 import ActivityView from "./views/ActivityView"
 import PlanningView from "./views/PlanningView"
 import SegmentsView from "./views/SegmentsView"
 import CoachView from "./views/CoachView"
 import { api } from "./lib/api"
-import { fullDate, km, duration } from "./lib/format"
 import "./styles/tokens.css"
 
-const VIEWS = [
+const STATE_VIEWS = [
   { id: "today", label: "Hoje" },
   { id: "week", label: "Semana" },
   { id: "fitness", label: "Fitness" },
+]
+
+const DETAIL_VIEWS = [
   { id: "activity", label: "Atividade" },
-  { id: "planning", label: "Planejamento" },
   { id: "segments", label: "Segmentos" },
+  { id: "planning", label: "Plano" },
   { id: "coach", label: "Coach" },
 ]
 
@@ -31,16 +40,14 @@ const VIEWS = [
 function initialTheme() {
   const stored = localStorage.getItem("velodna-theme")
   if (stored) return stored
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light"
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 export default function App() {
-  const [view, setView] = useState("today")
+  const [view, setView] = useState("week")
   const [theme, setTheme] = useState(initialTheme)
-  const [latest, setLatest] = useState(null)
   const [zones, setZones] = useState(null)
+  const [focusedActivity, setFocusedActivity] = useState(null)
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme)
@@ -48,52 +55,95 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
-    api.activities.latest().then(setLatest).catch(() => {})
     api.fitness.zones().then(setZones).catch(() => {})
   }, [])
+
+  /** Abre uma atividade vinda do drawer da semana, mudando de visão junto. */
+  const openActivity = (activity) => {
+    setFocusedActivity(activity)
+    setView("activity")
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--surface-page)" }}>
       <header
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-4)",
-          padding: "var(--space-3) var(--space-5)",
-          borderBottom: "1px solid var(--border)",
+          borderBottom: "1px solid var(--border-subtle)",
           background: "var(--surface-1)",
-          flexWrap: "wrap",
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
         }}
       >
-        <strong style={{ fontSize: "var(--fs-lead)", letterSpacing: "-0.01em" }}>
-          VeloDNA
-        </strong>
+        <div
+          style={{
+            maxWidth: "var(--page-max)",
+            margin: "0 auto",
+            padding: "var(--space-4) var(--page-margin)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-8)",
+            flexWrap: "wrap",
+          }}
+        >
+          <strong
+            style={{
+              fontSize: "var(--fs-lead)",
+              letterSpacing: "-0.01em",
+              cursor: "pointer",
+            }}
+            onClick={() => setView("week")}
+          >
+            VeloDNA
+          </strong>
 
-        <nav className="segmented" role="group" aria-label="Seções">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              aria-pressed={view === v.id}
-              onClick={() => setView(v.id)}
-            >
-              {v.label}
-            </button>
-          ))}
-        </nav>
+          <nav className="segmented" role="group" aria-label="Estado">
+            {STATE_VIEWS.map((v) => (
+              <button key={v.id} aria-pressed={view === v.id} onClick={() => setView(v.id)}>
+                {v.label}
+              </button>
+            ))}
+          </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
-          {latest && (
-            <span
-              className="muted"
-              style={{ fontSize: "var(--fs-micro)" }}
-            >
-              Última atividade: {fullDate(latest.started_at)} ·{" "}
-              {km(latest.distance_m)} · {duration(latest.elapsed_time_s)}
-            </span>
-          )}
+          <nav
+            role="group"
+            aria-label="Detalhe"
+            style={{ display: "flex", gap: "var(--space-5)" }}
+          >
+            {DETAIL_VIEWS.map((v) => (
+              <button
+                key={v.id}
+                aria-pressed={view === v.id}
+                onClick={() => setView(v.id)}
+                style={{
+                  appearance: "none",
+                  border: 0,
+                  background: "transparent",
+                  font: "inherit",
+                  fontSize: "var(--fs-small)",
+                  cursor: "pointer",
+                  padding: 0,
+                  color:
+                    view === v.id ? "var(--text-primary)" : "var(--text-tertiary)",
+                  borderBottom:
+                    view === v.id
+                      ? "1px solid var(--text-primary)"
+                      : "1px solid transparent",
+                  paddingBottom: 2,
+                }}
+              >
+                {v.label}
+              </button>
+            ))}
+          </nav>
+
           <button
             className="segmented"
-            style={{ padding: "5px 10px", cursor: "pointer" }}
+            style={{
+              marginLeft: "auto",
+              padding: "var(--space-2) var(--space-3)",
+              cursor: "pointer",
+            }}
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
           >
@@ -102,11 +152,11 @@ export default function App() {
         </div>
       </header>
 
-      <main style={{ padding: "var(--space-5)", maxWidth: 1440, margin: "0 auto" }}>
-        {view === "today" && <TodayView />}
-        {view === "week" && <WeekView />}
+      <main>
+        {view === "today" && <TodayView onGoToWeek={() => setView("week")} />}
+        {view === "week" && <WeekView onOpenActivity={openActivity} />}
         {view === "fitness" && <FitnessView athleteWeightKg={zones?.weight_kg} />}
-        {view === "activity" && <ActivityView />}
+        {view === "activity" && <ActivityView initialActivity={focusedActivity} />}
         {view === "planning" && <PlanningView />}
         {view === "segments" && <SegmentsView />}
         {view === "coach" && <CoachView />}

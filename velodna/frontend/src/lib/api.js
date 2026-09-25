@@ -9,6 +9,66 @@ import axios from "axios"
 
 const client = axios.create({ baseURL: "/api", timeout: 30000 })
 
+/**
+ * Erro de API já classificado, com mensagem que diz o que fazer.
+ *
+ * O usuário não deve ler "AxiosError: Request failed with status code 502". Um
+ * 502 aqui quase sempre significa uma coisa específica e recuperável: o proxy do
+ * Vite está de pé mas a API caiu — tipicamente porque foi parada para liberar o
+ * banco para um script de escrita, já que o DuckDB aceita um escritor só.
+ */
+export class ApiError extends Error {
+  constructor(message, { kind, status, hint, cause } = {}) {
+    super(message)
+    this.name = "ApiError"
+    this.kind = kind
+    this.status = status
+    this.hint = hint
+    this.cause = cause
+  }
+}
+
+const API_DOWN_HINT = "make api"
+
+/** Traduz a falha do axios em algo que o usuário consiga agir. */
+function classify(error) {
+  const status = error.response?.status
+
+  if (status === 502 || status === 503 || status === 504) {
+    return new ApiError("A API não está respondendo.", {
+      kind: "api-down",
+      status,
+      hint: API_DOWN_HINT,
+      cause: error,
+    })
+  }
+
+  if (!error.response) {
+    // Sem resposta alguma: ou o dev server caiu, ou a rede sumiu no caminho.
+    return new ApiError("Não foi possível falar com o servidor.", {
+      kind: "unreachable",
+      hint: API_DOWN_HINT,
+      cause: error,
+    })
+  }
+
+  if (status >= 500) {
+    return new ApiError("A API encontrou um erro interno.", {
+      kind: "server",
+      status,
+      hint: "Confira o log do uvicorn.",
+      cause: error,
+    })
+  }
+
+  const detail = error.response?.data?.detail
+  return new ApiError(detail || `Requisição recusada (HTTP ${status}).`, {
+    kind: "request",
+    status,
+    cause: error,
+  })
+}
+
 /** Devolve os dados da resposta, ou um valor padrão quando o recurso não existe. */
 async function get(path, { params, fallback } = {}) {
   try {
@@ -16,7 +76,17 @@ async function get(path, { params, fallback } = {}) {
     return response.data
   } catch (error) {
     if (fallback !== undefined && error.response?.status === 404) return fallback
-    throw error
+    throw classify(error)
+  }
+}
+
+/** Mesma classificação para os verbos de escrita. */
+async function send(method, path, body) {
+  try {
+    const response = await client[method](path, body)
+    return response.data
+  } catch (error) {
+    throw classify(error)
   }
 }
 
@@ -53,13 +123,13 @@ export const api = {
   segments: {
     list: () => get("/segments", { fallback: [] }),
     efforts: (id) => get(`/segments/${id}/efforts`, { fallback: null }),
-    create: (body) => client.post("/segments", body).then((r) => r.data),
-    rescan: (id) => client.post(`/segments/${id}/rescan`).then((r) => r.data),
-    remove: (id) => client.delete(`/segments/${id}`).then((r) => r.data),
+    create: (body) => send("post", "/segments", body),
+    rescan: (id) => send("post", `/segments/${id}/rescan`),
+    remove: (id) => send("delete", `/segments/${id}`),
   },
 
   coach: {
-    chat: (body) => client.post("/coach/chat", body).then((r) => r.data),
+    chat: (body) => send("post", "/coach/chat", body),
     history: (sessionId) => get(`/coach/chat/${sessionId}`, { fallback: [] }),
     sessions: () => get("/coach/chat-sessions", { fallback: [] }),
   },
@@ -74,12 +144,28 @@ export const api = {
       get(`/activities/${id}/durability`, { params, fallback: null }),
   },
 
+  analysis: {
+    climbs: (id, params) => get(`/activities/${id}/climbs`, { params, fallback: null }),
+    pacing: (id) => get(`/activities/${id}/pacing`, { fallback: null }),
+    loadDensity: (id, params) =>
+      get(`/activities/${id}/load-density`, { params, fallback: null }),
+    capacityProfile: (params) =>
+      get("/capacity-profile", { params, fallback: null }),
+  },
+
+  feedback: {
+    list: (params) => get("/feedback", { params, fallback: [] }),
+    forActivity: (id) => get(`/activities/${id}/feedback`, { fallback: null }),
+    save: (body) => send("put", "/feedback", body),
+    remove: (id) => send("delete", `/feedback/${id}`),
+  },
+
   planning: {
     calendar: (params) => get("/calendar", { params, fallback: null }),
     projection: (body) =>
-      client.post("/planning/projection", body).then((r) => r.data),
+      send("post", "/planning/projection", body),
     addWorkout: (body) =>
-      client.post("/planning/workouts", body).then((r) => r.data),
-    reconcile: () => client.post("/planning/reconcile").then((r) => r.data),
+      send("post", "/planning/workouts", body),
+    reconcile: () => send("post", "/planning/reconcile"),
   },
 }

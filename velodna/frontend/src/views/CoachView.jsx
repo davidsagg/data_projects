@@ -78,6 +78,7 @@ export default function CoachView() {
   }
 
   return (
+    <div className="page">
     <div
       style={{
         display: "grid",
@@ -251,6 +252,7 @@ export default function CoachView() {
           </button>
         ))}
       </section>
+    </div>
     </div>
   )
 }

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "velodna": {
+      "command": ".venv/bin/python",
+      "args": ["-m", "mcp_server.server"],
+      "env": {
+        "PYTHONPATH": "src",
+        "VELODNA_API_URL": "http://localhost:8006"
+      }
+    }
+  }
+}

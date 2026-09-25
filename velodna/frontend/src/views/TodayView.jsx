@@ -1,19 +1,21 @@
 /*
- * Visão Hoje — o estado do atleta agora e o que ele sugere fazer.
+ * Visão Hoje — o estado do atleta agora.
  *
- * Ordem de leitura: prontidão e recomendação primeiro, alertas logo abaixo
- * (só aparecem quando existem), depois a semana e por fim as tendências de
- * saúde, que são leitura de fundo e não de decisão imediata.
+ * Responde: "como estou hoje e o que devo fazer?". Três blocos, hierarquia
+ * Whoop: um número domina a tela, quatro indicadores de contexto logo abaixo
+ * com peso igual entre si, e a leitura do coach por último.
+ *
+ * A tela não repete a semana — ela aponta para ela. Quem quer a semana clica no
+ * link do rodapé; duplicar o conteúdo aqui faria duas telas responderem à mesma
+ * pergunta, que é o problema que a reorganização veio resolver.
  */
 import { useEffect, useState } from "react"
 
-import ReadinessHero from "../components/health/ReadinessHero"
-import HRVChart from "../components/health/HRVChart"
-import WellnessChart from "../components/health/WellnessChart"
-import CorrelationPanel from "../components/health/CorrelationPanel"
-import StatTile from "../components/viz/StatTile"
+import HeroNumber from "../components/viz/HeroNumber"
+import MetricCard from "../components/viz/MetricCard"
+import ErrorState from "../components/viz/ErrorState"
 import { api } from "../lib/api"
-import { duration, formState, fullDate, km, num } from "../lib/format"
+import { formState, num, shortDate } from "../lib/format"
 
 const SEVERITY_TOKEN = {
   danger: "--status-critical",
@@ -21,68 +23,125 @@ const SEVERITY_TOKEN = {
   info: null,
 }
 
-export default function TodayView() {
+/** Faixas de prontidão — o rótulo acompanha a cor, nunca a substitui. */
+function readinessTone(score) {
+  if (score == null) return { token: null, label: "sem dados" }
+  if (score >= 70) return { token: "--status-good", label: "recuperado" }
+  if (score >= 50) return { token: null, label: "moderado" }
+  if (score >= 35) return { token: "--status-warning", label: "fadigado" }
+  return { token: "--status-critical", label: "muito fadigado" }
+}
+
+export default function TodayView({ onGoToWeek }) {
   const [state, setState] = useState({ loading: true })
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
 
     Promise.all([
       api.health.readiness(),
-      api.health.daily(365),
+      api.health.daily(30),
       api.health.alerts(),
       api.fitness.pmc(),
-      api.planning.calendar(),
-      api.activities.list(),
     ])
-      .then(([readiness, health, alerts, pmc, calendar, activities]) => {
-        if (cancelled) return
-        setState({ loading: false, readiness, health, alerts, pmc, calendar, activities })
+      .then(([readiness, health, alerts, pmc]) => {
+        if (!cancelled) setState({ loading: false, readiness, health, alerts, pmc })
       })
       .catch((error) => {
-        if (!cancelled) setState({ loading: false, error: String(error) })
+        if (!cancelled) setState({ loading: false, error })
       })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [attempt])
 
-  if (state.loading) return <p className="muted">Carregando…</p>
+  if (state.loading) return <TodaySkeleton />
   if (state.error)
-    return <p style={{ color: "var(--status-critical)" }}>Erro: {state.error}</p>
+    return (
+      <ErrorState
+        error={state.error}
+        onRetry={() => setAttempt((n) => n + 1)}
+      />
+    )
 
-  const today = state.health?.[0]
+  const latestHealth = state.health?.[0]
   const latestLoad = state.pmc?.[state.pmc.length - 1]
   const form = formState(latestLoad?.tsb)
-  const week = summarizeWeek(state.calendar)
-  const recent = (state.activities || []).slice(-5).reverse()
+  const score = state.readiness?.score
+  const tone = readinessTone(score)
+
+  const hrvAverage = averageOf(state.health, "hrv_rmssd_ms", 7)
+  const hrvDelta =
+    latestHealth?.hrv_rmssd_ms != null && hrvAverage != null
+      ? latestHealth.hrv_rmssd_ms - hrvAverage
+      : null
+
+  const healthIsStale = isStale(latestHealth?.date)
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
-      <ReadinessHero readiness={state.readiness} health={today} />
+    <div className="page">
+      <section className="section">
+        <h1 className="label" style={{ margin: 0 }}>
+          Hoje ·{" "}
+          {new Date().toLocaleDateString("pt-BR", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+          })}
+        </h1>
+
+        <div style={{ padding: "var(--space-8) 0" }}>
+          <HeroNumber
+            value={score == null ? "—" : num(score, 0)}
+            label="prontidão"
+            statusToken={tone.token}
+            context={
+              state.readiness?.recommendation
+                ? `${tone.label} — ${state.readiness.recommendation.toLowerCase()}`
+                : "Sem dados de saúde suficientes para calcular."
+            }
+          />
+        </div>
+
+        {healthIsStale && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: "var(--fs-small)",
+              color: "var(--status-warning)",
+            }}
+          >
+            Última sincronização de saúde em {shortDate(latestHealth.date)}. Rode{" "}
+            <code>scripts/sync_garmin_health.py</code> para atualizar.
+          </p>
+        )}
+
+        <hr className="rule" />
+      </section>
 
       {state.alerts?.length > 0 && (
-        <section className="card">
-          <h2 className="card-title">Alertas ativos</h2>
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-2)" }}>
-            {state.alerts.map((alert) => (
+        <section className="section">
+          <span className="label">Alertas</span>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-3)" }}>
+            {state.alerts.map((alert, index) => (
               <li
-                key={alert.type}
-                style={{ display: "flex", gap: "var(--space-2)", alignItems: "baseline" }}
+                key={index}
+                style={{
+                  display: "flex",
+                  gap: "var(--space-3)",
+                  alignItems: "baseline",
+                  fontSize: "var(--fs-body)",
+                }}
               >
-                {/* Severidade nunca é só cor: vem com rótulo. */}
                 <span
+                  className="viz-swatch"
                   style={{
-                    fontSize: "var(--fs-micro)",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    color: `var(${SEVERITY_TOKEN[alert.severity] || "--text-muted"})`,
-                    minWidth: 64,
+                    background: `var(${SEVERITY_TOKEN[alert.severity] || "--text-tertiary"})`,
+                    borderRadius: "50%",
                   }}
-                >
-                  {alert.severity}
-                </span>
+                />
                 <span style={{ color: "var(--text-secondary)" }}>{alert.message}</span>
               </li>
             ))}
@@ -90,93 +149,87 @@ export default function TodayView() {
         </section>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          gap: "var(--space-3)",
-        }}
+      <section
+        className="section"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
       >
-        <StatTile
-          label="Forma · TSB"
-          value={num(latestLoad?.tsb, 1)}
-          context={form.label}
-          statusToken={form.token}
-        />
-        <StatTile label="Fitness · CTL" value={num(latestLoad?.ctl, 1)} />
-        <StatTile
-          label="TSS da semana"
-          value={num(week.actual, 0)}
-          context={week.planned > 0 ? `${num(week.compliance, 0)}% do plano` : "sem plano"}
-          statusToken={
-            week.planned > 0 && week.compliance < 80 ? "--status-warning" : null
+        <MetricCard
+          label="Sono"
+          value={latestHealth?.sleep_hours ? formatSleep(latestHealth.sleep_hours) : "—"}
+          context={
+            latestHealth?.sleep_quality_score
+              ? `qualidade ${latestHealth.sleep_quality_score}/100`
+              : "sem registro"
           }
         />
-        <StatTile label="Treinos na semana" value={num(week.sessions, 0)} />
-        <StatTile
-          label="Sono (média 7d)"
-          value={num(averageOf(state.health, "sleep_hours", 7), 1)}
-          unit="h"
+        <MetricCard
+          label="HRV"
+          value={latestHealth?.hrv_rmssd_ms ? num(latestHealth.hrv_rmssd_ms, 0) : "—"}
+          unit={latestHealth?.hrv_rmssd_ms ? "ms" : undefined}
+          context={
+            hrvDelta != null
+              ? `${hrvDelta > 0 ? "+" : ""}${num(hrvDelta, 1)} vs. média de 7 dias`
+              : "sem baseline"
+          }
         />
-      </div>
+        <MetricCard
+          label="Forma"
+          value={latestLoad?.tsb != null ? num(latestLoad.tsb, 0) : "—"}
+          unit={latestLoad?.tsb != null ? "TSB" : undefined}
+          statusToken={form.token}
+          context={
+            latestLoad?.ctl != null
+              ? `${form.label} · CTL ${num(latestLoad.ctl, 0)}`
+              : form.label
+          }
+        />
+        <MetricCard
+          label="Body battery"
+          value={latestHealth?.body_battery ?? "—"}
+          context={
+            latestHealth?.resting_hr_bpm
+              ? `FC repouso ${latestHealth.resting_hr_bpm} bpm`
+              : "sem registro"
+          }
+        />
+      </section>
 
-      <HRVChart health={state.health} />
-      <WellnessChart health={state.health} />
-      <CorrelationPanel />
-
-      <section className="card">
-        <h2 className="card-title">Atividades recentes</h2>
-        <div className="scroll-x">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Esporte</th>
-                <th>Distância</th>
-                <th>Duração</th>
-                <th>NP</th>
-                <th>IF</th>
-                <th>TSS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((a) => (
-                <tr key={a.id}>
-                  <td>{fullDate(a.started_at)}</td>
-                  <td>{a.sport_type}</td>
-                  <td>{km(a.distance_m)}</td>
-                  <td>{duration(a.elapsed_time_s)}</td>
-                  <td>{a.normalized_power_w ? `${num(a.normalized_power_w)} W` : "—"}</td>
-                  <td>{num(a.intensity_factor, 2)}</td>
-                  <td>{num(a.tss, 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <section style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={onGoToWeek}
+          style={{
+            appearance: "none",
+            border: 0,
+            background: "transparent",
+            color: "var(--text-secondary)",
+            font: "inherit",
+            fontSize: "var(--fs-body)",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          ver semana completa →
+        </button>
       </section>
     </div>
   )
 }
 
-/** Resume os últimos sete dias do calendário. */
-function summarizeWeek(calendar) {
-  const empty = { planned: 0, actual: 0, compliance: 0, sessions: 0 }
-  if (!calendar?.days?.length) return empty
-
-  const today = new Date().toISOString().slice(0, 10)
-  const week = calendar.days.filter((d) => d.date <= today).slice(-7)
-
-  const planned = week.reduce((acc, d) => acc + (d.planned_tss || 0), 0)
-  const actual = week.reduce((acc, d) => acc + (d.actual_tss || 0), 0)
-  const sessions = week.reduce((acc, d) => acc + (d.activities?.length || 0), 0)
-
-  return {
-    planned,
-    actual,
-    sessions,
-    compliance: planned > 0 ? (actual / planned) * 100 : 0,
-  }
+function TodaySkeleton() {
+  return (
+    <div className="page" aria-busy="true">
+      <div className="section">
+        <div className="skeleton" style={{ height: 14, width: 240 }} />
+        <div className="skeleton" style={{ height: 64, width: 160 }} />
+        <div className="skeleton" style={{ height: 14, width: 340 }} />
+      </div>
+      <div className="section" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skeleton" style={{ height: 150, borderRadius: "var(--radius)" }} />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /** Média dos N registros mais recentes de uma chave. */
@@ -187,4 +240,16 @@ function averageOf(health, key, days) {
     .map((h) => h[key])
     .filter((v) => v !== null && v !== undefined)
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null
+}
+
+/** Indica dado de saúde parado há mais de três dias. */
+function isStale(date) {
+  if (!date) return false
+  const days = (Date.now() - new Date(`${date}T12:00:00`)) / 86400000
+  return days > 3
+}
+
+function formatSleep(hours) {
+  const total = Math.round(hours * 60)
+  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, "0")}`
 }

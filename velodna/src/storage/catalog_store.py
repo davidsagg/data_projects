@@ -257,6 +257,39 @@ CREATE TABLE IF NOT EXISTS ai_insights (
     created_at       TIMESTAMPTZ DEFAULT now()
 );
 
+-- Feedback subjetivo do atleta. O acervo inteiro é objetivo — watts, batimentos,
+-- horas de sono medidas — e isso deixa os outliers sem explicação: um treino
+-- fraco com HRV normal e sono bom não tem causa visível nos dados, mas o atleta
+-- sabia no primeiro minuto que as pernas não estavam lá.
+--
+-- `activity_id` é opcional de propósito: dia de descanso também gera contexto
+-- ("semana estressante", "dormi mal"), e amarrar tudo a uma atividade perderia
+-- justamente os dias que explicam os treinos seguintes. A chave é (athlete, data,
+-- atividade), com a atividade nula representando a nota do dia.
+--
+-- `rpe` segue a escala de Borg CR10 (1 = muito leve, 10 = máximo).
+-- `feel` é como o corpo respondeu, de 1 (péssimo) a 5 (ótimo) — não é o mesmo
+-- que RPE: um treino pode ser duro (RPE 9) e ter sensação ótima (feel 5).
+CREATE TABLE IF NOT EXISTS activity_feedback (
+    id           UUID PRIMARY KEY,
+    athlete_id   UUID NOT NULL,
+    date         DATE NOT NULL,
+    activity_id  UUID,
+    rpe          INTEGER,
+    feel         INTEGER,
+    soreness     INTEGER,
+    motivation   INTEGER,
+    notes        TEXT,
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+-- Um feedback por atividade, e um por dia sem atividade. O índice único não
+-- cobre NULL em DuckDB, então a unicidade do caso "nota do dia" é garantida
+-- pelo upsert em `upsert_feedback`, não pelo schema.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_activity
+    ON activity_feedback (activity_id);
+
 CREATE TABLE IF NOT EXISTS power_curves (
     id          UUID PRIMARY KEY,
     activity_id UUID NOT NULL,
@@ -274,6 +307,33 @@ _HEALTH_METRIC_FIELDS = frozenset({
     "body_battery", "body_battery_min", "stress_level", "vo2max_estimated",
     "weight_kg", "steps", "source",
 })
+
+
+# Campos aceitos em upsert_feedback, e a escala de cada um.
+_FEEDBACK_FIELDS = frozenset({"rpe", "feel", "soreness", "motivation", "notes"})
+
+_FEEDBACK_SCALES = {
+    "rpe": (1, 10),        # Borg CR10
+    "feel": (1, 5),
+    "soreness": (1, 5),
+    "motivation": (1, 5),
+}
+
+
+def _validate_feedback(fields: dict) -> None:
+    """Rejeita valores fora da escala.
+
+    Um RPE 50 gravado por engano não quebra nada na hora, mas contamina toda
+    correlação que depender dele depois — e aí a causa já está enterrada.
+    """
+    for name, (low, high) in _FEEDBACK_SCALES.items():
+        value = fields.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, int) or not low <= value <= high:
+            raise ValueError(
+                f"{name} deve ser um inteiro entre {low} e {high}; recebido {value!r}"
+            )
 
 
 def _new_id() -> str:
@@ -464,6 +524,136 @@ class CatalogStore:
             "SELECT COUNT(*) FROM activity_streams WHERE activity_id = ?",
             [activity_id],
         ).fetchone()[0]
+
+    # ------------------------------------------------------------------
+    # Feedback subjetivo
+    # ------------------------------------------------------------------
+
+    def upsert_feedback(
+        self,
+        athlete_id: str,
+        record_date: date,
+        activity_id: str | None = None,
+        **fields: Any,
+    ) -> str:
+        """Grava ou atualiza o feedback de uma atividade, ou a nota de um dia.
+
+        A chave é (atleta, data, atividade). Com `activity_id` nulo, o registro
+        é a nota do dia — e há no máximo uma por data, o que este método garante
+        (o índice único do schema não cobre NULL em DuckDB).
+
+        Campos ausentes na chamada não são apagados: quem grava só o RPE não
+        perde a nota escrita antes.
+
+        Args:
+            athlete_id: UUID do atleta.
+            record_date: data à qual o feedback se refere.
+            activity_id: atividade, quando o feedback é de um treino.
+            **fields: `rpe`, `feel`, `soreness`, `motivation`, `notes`.
+
+        Returns:
+            UUID do registro.
+
+        Raises:
+            ValueError: se algum campo não for reconhecido ou estiver fora da escala.
+        """
+        unknown = set(fields) - _FEEDBACK_FIELDS
+        if unknown:
+            raise ValueError(f"Campos de feedback desconhecidos: {unknown}")
+        _validate_feedback(fields)
+
+        existing = self._find_feedback(athlete_id, record_date, activity_id)
+
+        if existing:
+            for column, value in fields.items():
+                if value is not None:
+                    self._conn.execute(
+                        f"UPDATE activity_feedback SET {column} = ? WHERE id = ?",
+                        [value, existing],
+                    )
+            self._conn.execute(
+                "UPDATE activity_feedback SET updated_at = now() WHERE id = ?",
+                [existing],
+            )
+            return existing
+
+        feedback_id = _new_id()
+        self._conn.execute(
+            """
+            INSERT INTO activity_feedback (
+                id, athlete_id, date, activity_id, rpe, feel, soreness,
+                motivation, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                feedback_id,
+                athlete_id,
+                record_date,
+                activity_id,
+                fields.get("rpe"),
+                fields.get("feel"),
+                fields.get("soreness"),
+                fields.get("motivation"),
+                fields.get("notes"),
+            ],
+        )
+        return feedback_id
+
+    def get_feedback(
+        self,
+        athlete_id: str,
+        start: date,
+        end: date,
+    ) -> list[dict[str, Any]]:
+        """Devolve o feedback registrado no período, do mais antigo ao mais novo."""
+        result = self._conn.execute(
+            """
+            SELECT id, date, activity_id, rpe, feel, soreness, motivation,
+                   notes, updated_at
+            FROM activity_feedback
+            WHERE athlete_id = ? AND date BETWEEN ? AND ?
+            ORDER BY date, activity_id NULLS FIRST
+            """,
+            [athlete_id, start, end],
+        )
+        columns = [d[0] for d in result.description]
+        return [dict(zip(columns, row)) for row in result.fetchall()]
+
+    def get_activity_feedback(self, activity_id: str) -> dict[str, Any] | None:
+        """Devolve o feedback de uma atividade, ou None se não houver."""
+        result = self._conn.execute(
+            """
+            SELECT id, date, activity_id, rpe, feel, soreness, motivation,
+                   notes, updated_at
+            FROM activity_feedback WHERE activity_id = ?
+            """,
+            [activity_id],
+        )
+        columns = [d[0] for d in result.description]
+        found = result.fetchone()
+        return dict(zip(columns, found)) if found else None
+
+    def delete_feedback(self, feedback_id: str) -> None:
+        """Remove um registro de feedback."""
+        self._conn.execute("DELETE FROM activity_feedback WHERE id = ?", [feedback_id])
+
+    def _find_feedback(
+        self, athlete_id: str, record_date: date, activity_id: str | None
+    ) -> str | None:
+        """Localiza o registro existente para a chave (atleta, data, atividade)."""
+        if activity_id is not None:
+            found = self._conn.execute(
+                "SELECT id FROM activity_feedback WHERE activity_id = ?", [activity_id]
+            ).fetchone()
+        else:
+            found = self._conn.execute(
+                """
+                SELECT id FROM activity_feedback
+                WHERE athlete_id = ? AND date = ? AND activity_id IS NULL
+                """,
+                [athlete_id, record_date],
+            ).fetchone()
+        return str(found[0]) if found else None
 
     # ------------------------------------------------------------------
     # Health metrics

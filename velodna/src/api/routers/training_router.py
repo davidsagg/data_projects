@@ -11,11 +11,14 @@ durabilidade porque o FTP medido descansado não diz o que resta depois de
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
+from analytics.capacity import build_profile
+from analytics.climbs import detect_climbs, summarize_climbs
 from analytics.durability import DEFAULT_KJ_THRESHOLD, compute_durability
 from analytics.ftp_history import ftp_on
 from analytics.intervals import (
@@ -24,11 +27,14 @@ from analytics.intervals import (
     detect_intervals,
     group_into_sets,
 )
+from analytics.pacing_analysis import analyze_pacing, load_density
 from analytics.timeseries import load_series
 from analytics.weekly import build_week_series, build_week_summary
 from analytics.wprime_model import WPrimeModel
+from analytics.zones import build_power_zones
 from api.dependencies import get_athlete_id, get_db
 from api.query import row as query_row
+from api.query import rows as query_rows
 from storage.catalog_store import CatalogStore
 
 router = APIRouter()
@@ -277,3 +283,245 @@ def _decimate(values: list[float], target: int) -> list[float]:
         return [round(v, 1) for v in values]
     step = len(values) / target
     return [round(values[int(i * step)], 1) for i in range(target)]
+
+
+# ---------------------------------------------------------------------------
+# Subidas
+# ---------------------------------------------------------------------------
+
+
+@router.get("/activities/{activity_id}/climbs")
+def get_climbs(
+    activity_id: str,
+    min_gain: float = 30.0,
+    min_gradient: float = 3.0,
+    db=Depends(get_db),
+):
+    """Subidas da atividade, com VAM, inclinação e potência de cada uma.
+
+    Num pedal de montanha a média da atividade não descreve nada — o que
+    descreve é o que aconteceu subindo.
+
+    Args:
+        activity_id: UUID da atividade.
+        min_gain: ganho mínimo de elevação, em metros.
+        min_gradient: inclinação média mínima, em percentual.
+    """
+    _activity_or_404(db, activity_id)
+
+    weight = query_row(
+        db,
+        "SELECT weight_kg FROM athletes WHERE id = ?",
+        [get_athlete_id(db)],
+    )
+    weight_kg = weight["weight_kg"] if weight else None
+
+    series = load_series(db, activity_id)
+    climbs = detect_climbs(series, min_gain, min_gradient)
+
+    return {
+        "activity_id": activity_id,
+        "summary": summarize_climbs(climbs),
+        "climbs": [
+            {
+                **asdict(climb),
+                "end_s": climb.end_s,
+                "category": climb.category(),
+                "watts_per_kg": climb.watts_per_kg(weight_kg),
+            }
+            for climb in climbs
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Execução e densidade de carga
+# ---------------------------------------------------------------------------
+
+
+@router.get("/activities/{activity_id}/pacing")
+def get_pacing(activity_id: str, db=Depends(get_db)):
+    """Distribuição de intensidade por quarto do esforço.
+
+    Revela o erro mais comum de prova: sair forte demais. Se o primeiro quarto
+    está nas zonas altas e o último desabou, a leitura é imediata.
+    """
+    store = CatalogStore(db)
+    activity = _activity_or_404(db, activity_id)
+
+    ftp = ftp_on(store, activity["athlete_id"], activity["date"])
+    if not ftp:
+        raise HTTPException(422, "Sem FTP vigente para esta data")
+
+    series = load_series(db, activity_id)
+    if not series.has_data("power"):
+        raise HTTPException(422, "Atividade sem dados de potência")
+
+    return {
+        "activity_id": activity_id,
+        "ftp_w_at_time": ftp,
+        **analyze_pacing(series, build_power_zones(ftp)),
+    }
+
+
+@router.get("/activities/{activity_id}/load-density")
+def get_load_density(
+    activity_id: str,
+    power_bin: int = 25,
+    hr_bin: int = 5,
+    db=Depends(get_db),
+):
+    """Densidade conjunta de potência (carga externa) e FC (carga interna).
+
+    A nuvem inteira se desloca para cima e para a esquerda quando há ganho de
+    base: a mesma potência passa a custar menos batimentos.
+    """
+    _activity_or_404(db, activity_id)
+    series = load_series(db, activity_id)
+    return {"activity_id": activity_id, **load_density(series, power_bin, hr_bin)}
+
+
+# ---------------------------------------------------------------------------
+# Perfil de capacidade
+# ---------------------------------------------------------------------------
+
+
+@router.get("/capacity-profile")
+def get_capacity_profile(
+    days: int = 90,
+    sport: str = "cycling",
+    db=Depends(get_db),
+):
+    """Forças e limitadores por duração, contra o melhor histórico do atleta.
+
+    A referência é o próprio atleta, não uma tabela populacional: percentis
+    dependem de peso, idade e categoria, e erram feio no indivíduo.
+
+    Args:
+        days: janela recente a comparar.
+        sport: esporte a filtrar; corrida tem outra escala de potência.
+    """
+    athlete_id = _athlete_or_404(db)
+    end = date.today()
+    start = end - timedelta(days=days)
+
+    recent = _aggregate_curve(db, athlete_id, start, end, sport)
+    best = _aggregate_curve(db, athlete_id, None, None, sport)
+
+    return {
+        "window_days": days,
+        "sport": sport,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        **build_profile(recent, best),
+    }
+
+
+def _aggregate_curve(
+    db,
+    athlete_id: str,
+    start: date | None,
+    end: date | None,
+    sport: str,
+) -> dict[int, float]:
+    """Melhor potência por duração no período, a partir das curvas persistidas."""
+    rows_found = query_rows(
+        db,
+        """
+        SELECT pc.duration_s, max(pc.power_w) AS power_w
+        FROM power_curves pc
+        JOIN activities a ON a.id = pc.activity_id
+        WHERE a.athlete_id = ?
+          AND a.sport_type = ?
+          AND (? IS NULL OR pc.date >= ?)
+          AND (? IS NULL OR pc.date <= ?)
+        GROUP BY pc.duration_s
+        """,
+        [athlete_id, sport, start, start, end, end],
+    )
+    return {int(r["duration_s"]): float(r["power_w"]) for r in rows_found}
+
+
+# ---------------------------------------------------------------------------
+# Feedback subjetivo
+# ---------------------------------------------------------------------------
+
+
+class FeedbackIn(BaseModel):
+    """Feedback do atleta sobre um treino ou sobre o dia.
+
+    Todos os campos são opcionais: gravar só o RPE é um caso legítimo, e o
+    upsert preserva o que já estava lá. `activity_id` nulo significa nota do
+    dia, que é como um dia de descanso entra no registro.
+    """
+
+    date: date
+    activity_id: Optional[str] = None
+    rpe: Optional[int] = Field(None, ge=1, le=10, description="Borg CR10")
+    feel: Optional[int] = Field(None, ge=1, le=5, description="1 péssimo, 5 ótimo")
+    soreness: Optional[int] = Field(None, ge=1, le=5)
+    motivation: Optional[int] = Field(None, ge=1, le=5)
+    notes: Optional[str] = None
+
+
+@router.get("/feedback")
+def list_feedback(
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+    db=Depends(get_db),
+):
+    """Feedback registrado no período.
+
+    Args:
+        start: primeiro dia; padrão é 90 dias atrás.
+        end: último dia; padrão é hoje.
+    """
+    store = CatalogStore(db)
+    athlete_id = _athlete_or_404(db)
+    end = end or date.today()
+    start = start or (end - timedelta(days=90))
+    return store.get_feedback(athlete_id, start, end)
+
+
+@router.get("/activities/{activity_id}/feedback")
+def get_feedback(activity_id: str, db=Depends(get_db)):
+    """Feedback de uma atividade, ou `null` se ainda não houver."""
+    _activity_or_404(db, activity_id)
+    return CatalogStore(db).get_activity_feedback(activity_id)
+
+
+@router.put("/feedback")
+def put_feedback(payload: FeedbackIn, db=Depends(get_db)):
+    """Grava ou atualiza o feedback de um treino ou de um dia.
+
+    Idempotente por (atleta, data, atividade): reenviar o mesmo corpo não cria
+    duplicata, e campos omitidos preservam o valor anterior.
+    """
+    store = CatalogStore(db)
+    athlete_id = _athlete_or_404(db)
+
+    if payload.activity_id:
+        _activity_or_404(db, payload.activity_id)
+
+    try:
+        feedback_id = store.upsert_feedback(
+            athlete_id,
+            payload.date,
+            payload.activity_id,
+            rpe=payload.rpe,
+            feel=payload.feel,
+            soreness=payload.soreness,
+            motivation=payload.motivation,
+            notes=payload.notes,
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+    return {"id": feedback_id, "date": payload.date.isoformat()}
+
+
+@router.delete("/feedback/{feedback_id}")
+def delete_feedback(feedback_id: str, db=Depends(get_db)):
+    """Remove um registro de feedback."""
+    CatalogStore(db).delete_feedback(feedback_id)
+    return {"deleted": feedback_id}

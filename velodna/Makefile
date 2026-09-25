@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup dev api front test lint fmt dbt mlflow ports clean help
+.PHONY: setup dev api front stop mcp test lint fmt dbt mlflow ports clean help
 
 PY   := .venv/bin/python
 PIP  := .venv/bin/pip
@@ -22,16 +22,31 @@ setup: ## Primeira execução — venv, dependências (com dev) e frontend
 	@echo '✓ Pronto. "make dev" sobe API e frontend.'
 
 dev: ## Hot reload — API + frontend em paralelo
-	(DB_PATH=$(DB_PATH) .venv/bin/uvicorn api.main:app --app-dir src --port $(API_PORT) --reload &)
+	(DB_PATH=$(DB_PATH) .venv/bin/uvicorn api.main:app --app-dir src --port $(API_PORT) \
+	  --reload --reload-dir src &)
 	(cd frontend && npm run dev -- --port $(FRONTEND_PORT) &)
 	@echo 'API: http://localhost:$(API_PORT)/docs'
 	@echo 'App: http://localhost:$(FRONTEND_PORT)'
 
 api: ## Só a API
-	DB_PATH=$(DB_PATH) .venv/bin/uvicorn api.main:app --app-dir src --port $(API_PORT) --reload
+	DB_PATH=$(DB_PATH) .venv/bin/uvicorn api.main:app --app-dir src --port $(API_PORT) \
+	  --reload --reload-dir src
 
 front: ## Só o frontend
 	cd frontend && npm run dev -- --port $(FRONTEND_PORT)
+
+mcp: ## Servidor MCP em stdio — expõe o acervo ao Claude (exige a API no ar)
+	@lsof -ti:$(API_PORT) >/dev/null 2>&1 || { \
+	  echo '✗ a API precisa estar no ar. Rode "make api" noutro terminal.'; exit 1; }
+	PYTHONPATH=src $(PY) -m mcp_server.server
+
+stop: ## Para a API — o DuckDB aceita um escritor só, e scripts de escrita exigem o banco livre
+	@lsof -ti:$(API_PORT) 2>/dev/null | xargs kill 2>/dev/null || true
+	@sleep 1
+	@if lsof -ti:$(API_PORT) >/dev/null 2>&1; then \
+	  echo '  ainda ocupada — forçando'; lsof -ti:$(API_PORT) | xargs kill -9 2>/dev/null || true; \
+	fi
+	@echo '✓ porta $(API_PORT) livre. Rode o script e depois "make api".'
 
 test: ## Testes
 	DB_PATH=$(DB_PATH) $(PY) -m pytest -q

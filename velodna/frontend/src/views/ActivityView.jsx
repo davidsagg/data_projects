@@ -10,12 +10,16 @@ import { useEffect, useState } from "react"
 import ActivityPicker, { MAX_COMPARE } from "../components/activity/ActivityPicker"
 import ActivityDetail from "../components/activity/ActivityDetail"
 import ActivityCompare from "../components/activity/ActivityCompare"
+import DayContext from "../components/activity/DayContext"
 import IntervalPanel from "../components/training/IntervalPanel"
+import ClimbPanel from "../components/training/ClimbPanel"
+import PacingPanel from "../components/training/PacingPanel"
+import LoadDensityChart from "../components/training/LoadDensityChart"
 import WBalPanel from "../components/training/WBalPanel"
 import DurabilityPanel from "../components/training/DurabilityPanel"
 import { api } from "../lib/api"
 
-export default function ActivityView() {
+export default function ActivityView({ initialActivity }) {
   const [activities, setActivities] = useState(null)
   const [selected, setSelected] = useState([])
   const [data, setData] = useState({ streams: {}, curves: {}, zones: {} })
@@ -25,10 +29,12 @@ export default function ActivityView() {
       .list()
       .then((list) => {
         setActivities(list)
-        const latest = [...list].sort((a, b) =>
-          a.started_at < b.started_at ? 1 : -1,
-        )[0]
-        if (latest) setSelected([latest])
+        // Quando se chega pelo drawer da semana, a atividade escolhida lá é a
+        // que abre aqui — trocar de tela não pode custar a seleção.
+        const preferred =
+          (initialActivity && list.find((a) => a.id === initialActivity.id)) ||
+          [...list].sort((a, b) => (a.started_at < b.started_at ? 1 : -1))[0]
+        if (preferred) setSelected([preferred])
       })
       .catch(() => setActivities([]))
   }, [])
@@ -98,10 +104,10 @@ export default function ActivityView() {
 
   return (
     <div
+      className="page"
       style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(300px, 380px) minmax(0, 1fr)",
-        gap: "var(--space-4)",
+        gridTemplateColumns: "minmax(280px, 340px) minmax(0, 1fr)",
+        gap: "var(--card-gap)",
         alignItems: "start",
       }}
     >
@@ -122,12 +128,16 @@ export default function ActivityView() {
             />
             {/* Análises avançadas: cada painel busca o que precisa e se
                 esconde quando a atividade não sustenta a métrica. */}
+            <DayContext activity={selected[0]} />
             <IntervalPanel activityId={selected[0].id} />
             <WBalPanel
               activityId={selected[0].id}
               elapsedTimeS={selected[0].elapsed_time_s}
             />
+            <PacingPanel activityId={selected[0].id} />
+            <ClimbPanel activityId={selected[0].id} />
             <DurabilityPanel activityId={selected[0].id} />
+            <LoadDensityChart activityId={selected[0].id} />
           </div>
         )}
         {ready && selected.length > 1 && (

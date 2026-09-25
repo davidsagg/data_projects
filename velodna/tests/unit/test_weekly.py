@@ -277,3 +277,98 @@ def test_zone_bucket_serializes_to_none_when_absent():
 
     assert week.to_dict()["intensity"]["easy"] is None
     assert ZoneBucket(seconds=60, pct=10.0).pct == 10.0
+
+
+# ---------------------------------------------------------------------------
+# Timeline unificada — treino e saúde no mesmo eixo
+# ---------------------------------------------------------------------------
+
+
+def test_days_always_seven_monday_to_sunday(store: CatalogStore, athlete: str):
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert len(week.days) == 7
+    assert [d.weekday for d in week.days] == list(range(7))
+    assert week.days[0].date == date(2026, 9, 7)
+    assert week.days[-1].date == date(2026, 9, 13)
+
+
+def test_day_carries_training_and_health_together(store: CatalogStore, athlete: str):
+    """O eixo compartilhado é o ponto do componente-assinatura."""
+    add_activity(store, athlete, date(2026, 9, 9), tss=120.0)
+    store.insert_health_daily(
+        athlete, date(2026, 9, 9), hrv_rmssd_ms=62.0, sleep_hours=6.5
+    )
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+    wednesday = week.days[2]
+
+    assert wednesday.tss == pytest.approx(120.0)
+    assert wednesday.hrv_rmssd_ms == pytest.approx(62.0)
+    assert wednesday.sleep_hours == pytest.approx(6.5)
+    assert wednesday.is_rest is False
+
+
+def test_rest_day_with_health_still_appears(store: CatalogStore, athlete: str):
+    """Dia sem treino mas com sono medido não pode sumir da timeline."""
+    store.insert_health_daily(athlete, date(2026, 9, 8), sleep_hours=8.1)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+    tuesday = week.days[1]
+
+    assert tuesday.is_rest is True
+    assert tuesday.tss == 0
+    assert tuesday.sleep_hours == pytest.approx(8.1)
+
+
+def test_training_day_without_health_still_appears(store: CatalogStore, athlete: str):
+    """E o inverso: treino sem sincronização do Garmin."""
+    add_activity(store, athlete, date(2026, 9, 10), tss=90.0)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+    thursday = week.days[3]
+
+    assert thursday.tss == pytest.approx(90.0)
+    assert thursday.hrv_rmssd_ms is None
+    assert thursday.sleep_hours is None
+
+
+def test_day_aggregates_multiple_activities(store: CatalogStore, athlete: str):
+    """Dia de dois treinos soma a carga, mas conta duas sessões."""
+    add_activity(store, athlete, date(2026, 9, 9), tss=60.0, distance_m=20000.0)
+    add_activity(store, athlete, date(2026, 9, 9), tss=40.0, distance_m=10000.0)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.days[2].tss == pytest.approx(100.0)
+    assert week.days[2].activity_count == 2
+    assert week.days[2].distance_m == pytest.approx(30000.0)
+
+
+def test_day_carries_planned_load(store: CatalogStore, athlete: str):
+    from planning.calendar import create_planned_workout
+
+    create_planned_workout(
+        store.conn, athlete, {"date": date(2026, 9, 11), "planned_tss": 140.0}
+    )
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.days[4].planned_tss == pytest.approx(140.0)
+
+
+def test_week_health_averages_ignore_missing_days(store: CatalogStore, athlete: str):
+    store.insert_health_daily(athlete, date(2026, 9, 7), sleep_hours=7.0, hrv_rmssd_ms=60.0)
+    store.insert_health_daily(athlete, date(2026, 9, 8), sleep_hours=8.0, hrv_rmssd_ms=70.0)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.avg_sleep_hours == pytest.approx(7.5)
+    assert week.avg_hrv_ms == pytest.approx(65.0)
+
+
+def test_week_without_health_has_no_averages(store: CatalogStore, athlete: str):
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.avg_sleep_hours is None
+    assert week.avg_hrv_ms is None

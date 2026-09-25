@@ -1,113 +1,202 @@
 /*
  * Tokens de design do VeloDNA.
  *
- * A paleta categórica foi validada nos dois temas (separação para daltonismo,
- * faixa de luminosidade, croma e contraste contra a superfície). Não trocar um
- * hex isoladamente: as cores foram escolhidas como conjunto e em ordem fixa —
- * a ordem é o mecanismo de segurança, não decoração.
+ * Base: `velodna_design_benchmark_v2.md` — estética calma, desktop-first, muito
+ * espaço negativo. Duas coisas mudaram em relação à spec, e por motivo:
  *
- * Exceção conhecida: no tema claro o verde-água fica abaixo de 3:1 contra a
- * superfície. A compensação é rótulo direto visível e vista de tabela, nunca
- * depender só da cor.
+ * 1. A spec é dark-only. O app tem alternador de tema, então cada cor semântica
+ *    ganhou um par claro, escolhido contra a superfície clara — não é o mesmo
+ *    hex reaproveitado, que perderia contraste.
+ *
+ * 2. As cores da spec não sobrevivem ao validador de paleta como conjunto: o
+ *    verde sálvia e o coral ficavam a ΔE 4,5 sob deuteranopia (o limite é 8), e
+ *    sálvia e lavanda liam como cinza. Mantive a intenção — dessaturado, calmo —
+ *    e re-escalonei até passar. O azul da spec (#5B8DD6) sobreviveu intacto.
+ *    Validado com o script do skill de dataviz nos dois temas; não trocar um hex
+ *    isolado sem revalidar o conjunto.
+ *
+ * 3. A spec pede um arco-íris frio→quente para as zonas de potência. Zonas são
+ *    ordinais, não categóricas, e arco-íris é anti-padrão reconhecido — viraram
+ *    rampa sequencial de um hue, que é como o olho já lê "mais intenso".
  */
 
 :root {
   color-scheme: light;
 
-  /* Superfícies e tinta */
+  /* ── Superfícies — três níveis, diferença sutil ───────────────────────── */
+  --surface-page: #f7f7f5;
   --surface-1: #fcfcfb;
-  --surface-page: #f9f9f7;
-  --surface-sunken: #f2f2ef;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --gridline: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
+  --surface-2: #ffffff;
+  --surface-sunken: #efefec;
 
-  /* Série categórica — ordem fixa, nunca ciclada */
-  --series-1: #2a78d6; /* azul   — CTL / fitness */
-  --series-2: #eb6834; /* laranja — ATL / fadiga */
-  --series-3: #1baf7a; /* verde-água — TSB / forma */
-  --series-4: #eda100;
-  --series-5: #e87ba4;
+  --text-primary: #16181d;
+  --text-secondary: #5a6070;
+  --text-tertiary: #8c93a3;
+  --text-muted: #8c93a3;
 
-  /* Rampa sequencial (azul), para magnitude contínua */
-  --seq-100: #cde2fb;
-  --seq-250: #86b6ef;
-  --seq-400: #3987e5;
-  --seq-550: #1c5cab;
-  --seq-700: #0d366b;
+  --border: rgba(22, 24, 29, 0.1);
+  --border-subtle: #e4e5e2;
+  --border-strong: #cdcfcb;
+  --gridline: #e4e5e2;
+  --axis: #cdcfcb;
 
-  /* Estado — reservado, nunca reutilizado como série */
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-serious: #ec835a;
-  --status-critical: #d03b3b;
-  --delta-up: #006300;
+  /* ── Séries semânticas — validadas como conjunto ──────────────────────── */
+  --ctl: #2f6fbf;
+  --atl: #b0532f;
+  --tsb-positive: #1c8460;
+  --tsb-negative: #a8761b;
+  --hrv: #6b4fb8;
+  --sleep: #7d8496;
 
-  /* Espaçamento e forma — layout denso */
+  /* Alias da nomenclatura anterior, para os componentes ainda não migrados. */
+  --series-1: #2f6fbf;
+  --series-2: #b0532f;
+  --series-3: #1c8460;
+  --series-4: #a8761b;
+  --series-5: #6b4fb8;
+
+  /* ── Rampa sequencial — magnitude contínua e zonas ────────────────────── */
+  --seq-100: #d9e6f7;
+  --seq-250: #a3c2e8;
+  --seq-400: #5b8dd6;
+  --seq-550: #2f6fbf;
+  --seq-700: #1a4880;
+
+  /* ── Estado — reservado, nunca reutilizado como série ─────────────────── */
+  --status-good: #1c8460;
+  --status-warning: #a8761b;
+  --status-serious: #b0532f;
+  --status-critical: #b3332f;
+  --delta-up: #1c8460;
+
+  /* ── Tipografia ───────────────────────────────────────────────────────── */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+  --fs-hero: 4rem;        /* 64px — um por tela, nunca dois */
+  --fs-figure: 2rem;      /* 32px — métrica de card */
+  --fs-lead: 1.125rem;    /* 18px */
+  --fs-body: 0.9375rem;   /* 15px */
+  --fs-small: 0.8125rem;  /* 13px */
+  --fs-micro: 0.6875rem;  /* 11px — label caixa alta */
+
+  --tracking-label: 0.1em;
+  --leading-body: 1.7;
+
+  /* ── Espaçamento — escala de 4px, valores altos ───────────────────────── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
-  --radius: 6px;
-  --radius-sm: 4px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
 
-  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --fs-micro: 11px;
-  --fs-small: 12px;
-  --fs-body: 13px;
-  --fs-lead: 15px;
-  --fs-figure: 26px;
-  --fs-hero: 34px;
+  --card-padding: var(--space-8);
+  --card-gap: var(--space-6);
+  --page-margin: var(--space-12);
+  --section-gap: var(--space-16);
+  --page-max: 1280px;
+
+  --radius-sm: 6px;
+  --radius: 12px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
 
-    --surface-1: #1a1a19;
-    --surface-page: #0d0d0d;
-    --surface-sunken: #141413;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --gridline: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
+    --surface-page: #12161f;
+    --surface-1: #181d28;
+    --surface-2: #1f2530;
+    --surface-sunken: #141921;
 
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #d55181;
+    --text-primary: #e8ebf0;
+    --text-secondary: #8e99ab;
+    --text-tertiary: #5c6678;
+    --text-muted: #5c6678;
 
-    --delta-up: #0ca30c;
+    --border: rgba(232, 235, 240, 0.1);
+    --border-subtle: #262d3a;
+    --border-strong: #343d4d;
+    --gridline: #262d3a;
+    --axis: #343d4d;
+
+    --ctl: #5b8dd6;
+    --atl: #c4664a;
+    --tsb-positive: #3e9b79;
+    --tsb-negative: #b8862f;
+    --hrv: #8b7bd8;
+    --sleep: #6f7889;
+
+    --series-1: #5b8dd6;
+    --series-2: #c4664a;
+    --series-3: #3e9b79;
+    --series-4: #b8862f;
+    --series-5: #8b7bd8;
+
+    --seq-100: #1e3350;
+    --seq-250: #2c5385;
+    --seq-400: #5b8dd6;
+    --seq-550: #8ab0e4;
+    --seq-700: #c2d7f2;
+
+    --status-good: #3e9b79;
+    --status-warning: #b8862f;
+    --status-serious: #c4664a;
+    --status-critical: #d0574f;
+    --delta-up: #3e9b79;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --surface-1: #1a1a19;
-  --surface-page: #0d0d0d;
-  --surface-sunken: #141413;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --gridline: #2c2c2a;
-  --axis: #383835;
-  --border: rgba(255, 255, 255, 0.1);
+  --surface-page: #12161f;
+  --surface-1: #181d28;
+  --surface-2: #1f2530;
+  --surface-sunken: #141921;
 
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
+  --text-primary: #e8ebf0;
+  --text-secondary: #8e99ab;
+  --text-tertiary: #5c6678;
+  --text-muted: #5c6678;
 
-  --delta-up: #0ca30c;
+  --border: rgba(232, 235, 240, 0.1);
+  --border-subtle: #262d3a;
+  --border-strong: #343d4d;
+  --gridline: #262d3a;
+  --axis: #343d4d;
+
+  --ctl: #5b8dd6;
+  --atl: #c4664a;
+  --tsb-positive: #3e9b79;
+  --tsb-negative: #b8862f;
+  --hrv: #8b7bd8;
+  --sleep: #6f7889;
+
+  --series-1: #5b8dd6;
+  --series-2: #c4664a;
+  --series-3: #3e9b79;
+  --series-4: #b8862f;
+  --series-5: #8b7bd8;
+
+  --seq-100: #1e3350;
+  --seq-250: #2c5385;
+  --seq-400: #5b8dd6;
+  --seq-550: #8ab0e4;
+  --seq-700: #c2d7f2;
+
+  --status-good: #3e9b79;
+  --status-warning: #b8862f;
+  --status-serious: #c4664a;
+  --status-critical: #d0574f;
+  --delta-up: #3e9b79;
 }
 
 /* --- Reset e base ------------------------------------------------------- */
@@ -122,152 +211,154 @@ body {
   margin: 0;
   font-family: var(--font);
   font-size: var(--fs-body);
+  line-height: var(--leading-body);
   color: var(--text-primary);
   background: var(--surface-page);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* --- Primitivas compartilhadas ------------------------------------------ */
 
 .card {
   background: var(--surface-1);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: var(--space-4);
-  min-width: 0; /* deixa o conteúdo encolher dentro do grid */
+  padding: var(--card-padding);
+  transition: border-color 150ms ease;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+/* O card estático não deve reagir ao ponteiro — só os interativos. */
+.card--static:hover {
+  border-color: var(--border-subtle);
 }
 
 .card-title {
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
+  margin: 0;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  margin: 0 0 var(--space-1);
+  color: var(--text-tertiary);
 }
 
 .card-subtitle {
-  font-size: var(--fs-micro);
-  color: var(--text-muted);
-  margin: 0 0 var(--space-3);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
 }
 
 .figure {
   font-size: var(--fs-figure);
-  font-weight: 600;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   line-height: 1.1;
-  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .figure-hero {
   font-size: var(--fs-hero);
-  font-weight: 650;
-  line-height: 1.05;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .unit {
-  font-size: var(--fs-small);
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-left: 2px;
+  margin-left: 0.25em;
+  font-size: 0.45em;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: 0;
 }
 
-/* Números em coluna precisam alinhar; números soltos ficam proporcionais. */
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
 .muted {
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+.label {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .scroll-x {
   overflow-x: auto;
-  max-width: 100%;
 }
 
-table.data {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--fs-small);
-  font-variant-numeric: tabular-nums;
+/* --- Layout de página ---------------------------------------------------- */
+
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--space-12) var(--page-margin) var(--space-20);
+  display: grid;
+  gap: var(--section-gap);
 }
 
-table.data th {
-  text-align: right;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+.section {
+  display: grid;
+  gap: var(--card-gap);
 }
 
-table.data th:first-child,
-table.data td:first-child {
-  text-align: left;
+.rule {
+  height: 1px;
+  background: var(--border-subtle);
+  border: 0;
+  margin: 0;
 }
 
-table.data td {
-  text-align: right;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--gridline);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-table.data tr:last-child td {
-  border-bottom: none;
-}
-
-/* --- Tooltip de gráfico -------------------------------------------------- */
+/* --- Tooltip ------------------------------------------------------------- */
 
 .viz-tooltip {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: var(--space-3) var(--space-4);
   font-size: var(--fs-small);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  min-width: 140px;
+  line-height: 1.5;
+  min-width: 150px;
 }
 
 .viz-tooltip-title {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--space-1);
   font-size: var(--fs-micro);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-2);
 }
 
 .viz-tooltip-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  align-items: baseline;
   justify-content: space-between;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  gap: var(--space-4);
 }
 
 .viz-tooltip-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+  color: var(--text-secondary);
 }
 
 .viz-swatch {
   width: 9px;
   height: 9px;
   border-radius: 2px;
-  flex-shrink: 0;
+  flex: none;
 }
 
 .viz-tooltip-value {
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -276,53 +367,80 @@ table.data tr:last-child td {
 .viz-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
 }
 
 .viz-legend-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--fs-micro);
-  color: var(--text-secondary);
+  gap: var(--space-2);
 }
 
 /* --- Controles ----------------------------------------------------------- */
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--surface-1);
 }
 
 .segmented button {
+  appearance: none;
   border: 0;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: var(--fs-micro);
-  padding: 5px 10px;
+  font-size: var(--fs-small);
+  padding: var(--space-2) var(--space-4);
   cursor: pointer;
-  white-space: nowrap;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.segmented button:hover {
+  color: var(--text-primary);
 }
 
 .segmented button + button {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-subtle);
 }
 
 .segmented button[aria-pressed="true"] {
   background: var(--surface-sunken);
   color: var(--text-primary);
-  font-weight: 600;
 }
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* --- Skeleton de carregamento (nunca spinner) --------------------------- */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--surface-2) 37%,
+    var(--surface-sunken) 63%
+  );
+  background-size: 400% 100%;
+  border-radius: var(--radius-sm);
+  animation: skeleton-sweep 1.4s ease infinite;
+}
+
+@keyframes skeleton-sweep {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  * { transition-duration: 0.01ms !important; }
 }

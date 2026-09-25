@@ -108,7 +108,7 @@ export default function SegmentsView() {
   }
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
+    <div className="page">
       <section className="card">
         <div className="toolbar" style={{ marginBottom: 0 }}>
           <div className="segmented" role="group" aria-label="Segmento">

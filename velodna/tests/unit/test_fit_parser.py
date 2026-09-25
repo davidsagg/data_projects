@@ -43,3 +43,38 @@ def test_timestamps_are_labelled_utc():
     for stream in activity.streams[:5]:
         assert stream.timestamp.tzinfo is not None, "stream sem fuso"
         assert stream.timestamp.utcoffset() == timezone.utc.utcoffset(None)
+
+
+def test_reads_enhanced_altitude_and_speed():
+    """Garmin moderno grava `enhanced_altitude`/`enhanced_speed` e omite os clássicos.
+
+    Ler só o nome clássico devolvia None em todo o acervo recente, e o erro era
+    invisível: o resumo continuava mostrando a elevação certa, porque esse número
+    vem da mensagem `session`, não dos records. Só apareceu quando a detecção de
+    subidas devolveu zero subidas num pedal de 1.570 m.
+    """
+    from unittest.mock import MagicMock
+
+    from ingestion.fit_parser import _first_value
+
+    record = MagicMock()
+    record.get_value.side_effect = lambda name: {
+        "enhanced_altitude": 771.0,
+        "enhanced_speed": 3.695,
+    }.get(name)
+
+    assert _first_value(record, "enhanced_altitude", "altitude") == 771.0
+    assert _first_value(record, "enhanced_speed", "speed") == 3.695
+
+
+def test_falls_back_to_classic_field_names():
+    """Aparelhos antigos gravam só `altitude`/`speed` — o fallback os cobre."""
+    from unittest.mock import MagicMock
+
+    from ingestion.fit_parser import _first_value
+
+    record = MagicMock()
+    record.get_value.side_effect = lambda name: {"altitude": 640.0}.get(name)
+
+    assert _first_value(record, "enhanced_altitude", "altitude") == 640.0
+    assert _first_value(record, "enhanced_speed", "speed") is None

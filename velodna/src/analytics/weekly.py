@@ -65,6 +65,57 @@ class ZoneBucket:
 
 
 @dataclass(frozen=True)
+class DayEntry:
+    """Um dia da semana com treino e saúde lado a lado.
+
+    É o que alimenta a timeline unificada: os dois eixos compartilham a data,
+    e é desse compartilhamento que sai a leitura que nenhuma plataforma entrega —
+    a noite de 6h30 na quarta antecedeu o treino fraco de quinta.
+    """
+
+    date: date
+    weekday: int
+    tss: float
+    planned_tss: float
+    duration_s: int
+    distance_m: float
+    activity_count: int
+    hrv_rmssd_ms: float | None = None
+    sleep_hours: float | None = None
+    resting_hr_bpm: int | None = None
+    body_battery: int | None = None
+    sleep_quality_score: int | None = None
+    rpe: int | None = None
+    feel: int | None = None
+    notes: str | None = None
+
+    @property
+    def is_rest(self) -> bool:
+        """Indica um dia sem nenhuma atividade registrada."""
+        return self.activity_count == 0
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date.isoformat(),
+            "weekday": self.weekday,
+            "tss": self.tss,
+            "planned_tss": self.planned_tss,
+            "duration_s": self.duration_s,
+            "distance_m": self.distance_m,
+            "activity_count": self.activity_count,
+            "is_rest": self.is_rest,
+            "hrv_rmssd_ms": self.hrv_rmssd_ms,
+            "sleep_hours": self.sleep_hours,
+            "resting_hr_bpm": self.resting_hr_bpm,
+            "body_battery": self.body_battery,
+            "sleep_quality_score": self.sleep_quality_score,
+            "rpe": self.rpe,
+            "feel": self.feel,
+            "notes": self.notes,
+        }
+
+
+@dataclass(frozen=True)
 class WeekSummary:
     """Resumo de uma semana de treino."""
 
@@ -82,6 +133,7 @@ class WeekSummary:
     threshold: ZoneBucket | None = None
     hard: ZoneBucket | None = None
     activities: list[dict] = field(default_factory=list)
+    days: list[DayEntry] = field(default_factory=list)
 
     previous_tss: float | None = None
     baseline_tss: float | None = None
@@ -131,6 +183,16 @@ class WeekSummary:
             return "base"
         return "piramidal"
 
+    @property
+    def avg_sleep_hours(self) -> float | None:
+        """Média de sono da semana, ignorando noites sem registro."""
+        return _mean([d.sleep_hours for d in self.days])
+
+    @property
+    def avg_hrv_ms(self) -> float | None:
+        """HRV médio da semana, ignorando dias sem registro."""
+        return _mean([d.hrv_rmssd_ms for d in self.days])
+
     def to_dict(self) -> dict:
         """Serializa o resumo para a API."""
         return {
@@ -156,6 +218,9 @@ class WeekSummary:
                 "hard": _bucket_dict(self.hard),
             },
             "activities": self.activities,
+            "days": [day.to_dict() for day in self.days],
+            "avg_sleep_hours": self.avg_sleep_hours,
+            "avg_hrv_ms": self.avg_hrv_ms,
         }
 
 
@@ -197,6 +262,7 @@ def build_week_summary(
         _aggregate_zones(store, athlete_id, activities) if with_zones else {}
     )
     easy, threshold, hard = _split_intensity(zone_seconds)
+    days = _build_days(store.conn, athlete_id, start, end, activities)
 
     return WeekSummary(
         week_start=start,
@@ -217,6 +283,7 @@ def build_week_summary(
         threshold=threshold,
         hard=hard,
         activities=activities,
+        days=days,
         previous_tss=_tss_between(
             store.conn, athlete_id, start - timedelta(days=7), start - timedelta(days=1)
         ),
@@ -255,6 +322,112 @@ def build_week_series(
 # ---------------------------------------------------------------------------
 # Auxiliares
 # ---------------------------------------------------------------------------
+
+
+def _mean(values: list) -> float | None:
+    """Média dos valores presentes, ou None se não houver nenhum."""
+    present = [v for v in values if v is not None]
+    return round(sum(present) / len(present), 2) if present else None
+
+
+def _build_days(
+    conn,
+    athlete_id: str,
+    start: date,
+    end: date,
+    activities: list[dict],
+) -> list[DayEntry]:
+    """Monta os sete dias da semana com treino e saúde na mesma linha.
+
+    Os dois lados são incompletos por natureza — há dia de descanso sem treino e
+    há dia sem sincronização do Garmin. O eixo é a data, e cada lado preenche o
+    que tem; nenhum dia some por falta de um dos dois.
+
+    Args:
+        conn: conexão DuckDB.
+        athlete_id: UUID do atleta.
+        start: segunda-feira da semana.
+        end: domingo da semana.
+        activities: atividades já carregadas do período.
+
+    Returns:
+        Sete `DayEntry`, de segunda a domingo.
+    """
+    health = {
+        row["date"]: row
+        for row in rows(
+            conn,
+            """
+            SELECT date, hrv_rmssd_ms, sleep_hours, resting_hr_bpm,
+                   body_battery, sleep_quality_score
+            FROM health_metrics
+            WHERE athlete_id = ? AND date BETWEEN ? AND ?
+            """,
+            [athlete_id, start, end],
+        )
+    }
+
+    planned = {
+        row["date"]: row["planned_tss"]
+        for row in rows(
+            conn,
+            """
+            SELECT date, COALESCE(SUM(planned_tss), 0) AS planned_tss
+            FROM planned_workouts
+            WHERE athlete_id = ? AND date BETWEEN ? AND ?
+            GROUP BY date
+            """,
+            [athlete_id, start, end],
+        )
+    }
+
+    # Feedback da atividade vence o do dia: quando os dois existem, o do treino
+    # é o mais específico. A nota do dia cobre justamente os dias sem treino.
+    feedback: dict[date, dict] = {}
+    for row in rows(
+        conn,
+        """
+        SELECT date, activity_id, rpe, feel, notes
+        FROM activity_feedback
+        WHERE athlete_id = ? AND date BETWEEN ? AND ?
+        ORDER BY date, activity_id NULLS FIRST
+        """,
+        [athlete_id, start, end],
+    ):
+        feedback[row["date"]] = row
+
+    by_date: dict[date, list[dict]] = {}
+    for activity in activities:
+        by_date.setdefault(activity["date"], []).append(activity)
+
+    entries: list[DayEntry] = []
+    for offset in range(7):
+        day = start + timedelta(days=offset)
+        done = by_date.get(day, [])
+        vitals = health.get(day, {})
+        felt = feedback.get(day, {})
+        entries.append(
+            DayEntry(
+                date=day,
+                weekday=offset,
+                tss=round(sum(a["tss"] or 0 for a in done), 1),
+                planned_tss=round(float(planned.get(day) or 0), 1),
+                duration_s=sum(
+                    a["moving_time_s"] or a["elapsed_time_s"] or 0 for a in done
+                ),
+                distance_m=round(sum(a["distance_m"] or 0 for a in done), 1),
+                activity_count=len(done),
+                hrv_rmssd_ms=vitals.get("hrv_rmssd_ms"),
+                sleep_hours=vitals.get("sleep_hours"),
+                resting_hr_bpm=vitals.get("resting_hr_bpm"),
+                body_battery=vitals.get("body_battery"),
+                sleep_quality_score=vitals.get("sleep_quality_score"),
+                rpe=felt.get("rpe"),
+                feel=felt.get("feel"),
+                notes=felt.get("notes"),
+            )
+        )
+    return entries
 
 
 def _bucket_dict(bucket: ZoneBucket | None) -> dict | None:

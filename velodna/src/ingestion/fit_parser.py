@@ -62,6 +62,30 @@ def _open_fit(path):
         return io.BytesIO(handle.read())
 
 
+def _first_value(record, *names: str):
+    """Devolve o primeiro campo presente no record, na ordem informada.
+
+    Os dispositivos Garmin modernos gravam `enhanced_altitude` e
+    `enhanced_speed` — campos de faixa maior introduzidos no protocolo — e
+    **omitem** os `altitude`/`speed` clássicos. Ler só o nome clássico devolvia
+    None em todo o acervo, o que deixou a altitude e a velocidade vazias sem que
+    nada falhasse: o resumo da atividade continuava mostrando 1.570 m de
+    elevação, porque esse número vem da mensagem `session`, não dos records.
+
+    Args:
+        record: mensagem `record` do arquivo FIT.
+        *names: nomes de campo, do preferido ao mais antigo.
+
+    Returns:
+        O primeiro valor não nulo, ou None.
+    """
+    for name in names:
+        value = record.get_value(name)
+        if value is not None:
+            return value
+    return None
+
+
 def _as_utc(value: datetime | None) -> datetime | None:
     """Rotula um timestamp do FIT como UTC.
 
@@ -124,8 +148,8 @@ class FITParser:
                 power_w=record.get_value("power"),
                 heart_rate_bpm=record.get_value("heart_rate"),
                 cadence_rpm=record.get_value("cadence"),
-                speed_ms=record.get_value("speed"),
-                altitude_m=record.get_value("altitude"),
+                speed_ms=_first_value(record, "enhanced_speed", "speed"),
+                altitude_m=_first_value(record, "enhanced_altitude", "altitude"),
                 lat=lat_sc * _SEMICIRCLE_TO_DEG if lat_sc is not None else None,
                 lon=lon_sc * _SEMICIRCLE_TO_DEG if lon_sc is not None else None,
                 distance_m=record.get_value("distance"),

@@ -314,3 +314,268 @@ def test_durability_unknown_activity_is_404(client):
     missing = "22222222-2222-2222-2222-222222222222"
 
     assert client.get(f"/activities/{missing}/durability").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Feedback subjetivo
+# ---------------------------------------------------------------------------
+
+
+def test_feedback_roundtrip_for_activity(client, db):
+    activity_id = add(db, date(2026, 9, 8))
+
+    saved = client.put(
+        "/feedback",
+        json={"date": "2026-09-08", "activity_id": activity_id, "rpe": 8, "feel": 3,
+              "notes": "pernas pesadas do começo ao fim"},
+    )
+    assert saved.status_code == 200
+
+    got = client.get(f"/activities/{activity_id}/feedback").json()
+    assert got["rpe"] == 8
+    assert got["feel"] == 3
+    assert "pernas pesadas" in got["notes"]
+
+
+def test_feedback_is_idempotent(client, db):
+    """Reenviar o mesmo corpo não pode criar um segundo registro."""
+    activity_id = add(db, date(2026, 9, 8))
+    body = {"date": "2026-09-08", "activity_id": activity_id, "rpe": 7}
+
+    first = client.put("/feedback", json=body).json()
+    second = client.put("/feedback", json=body).json()
+
+    assert first["id"] == second["id"]
+    assert len(client.get("/feedback?start=2026-09-01&end=2026-09-30").json()) == 1
+
+
+def test_partial_update_preserves_other_fields(client, db):
+    """Gravar só o RPE depois não pode apagar a nota escrita antes."""
+    activity_id = add(db, date(2026, 9, 8))
+    client.put(
+        "/feedback",
+        json={"date": "2026-09-08", "activity_id": activity_id, "notes": "vento forte"},
+    )
+    client.put(
+        "/feedback",
+        json={"date": "2026-09-08", "activity_id": activity_id, "rpe": 9},
+    )
+
+    got = client.get(f"/activities/{activity_id}/feedback").json()
+    assert got["rpe"] == 9
+    assert got["notes"] == "vento forte"
+
+
+def test_day_note_without_activity(client, db):
+    """Dia de descanso também gera contexto, e é o que explica o dia seguinte."""
+    response = client.put(
+        "/feedback", json={"date": "2026-09-09", "notes": "dormi mal, trabalho pesado"}
+    )
+    assert response.status_code == 200
+
+    rows = client.get("/feedback?start=2026-09-01&end=2026-09-30").json()
+    assert len(rows) == 1
+    assert rows[0]["activity_id"] is None
+
+
+def test_day_note_and_activity_feedback_coexist(client, db):
+    activity_id = add(db, date(2026, 9, 8))
+    client.put("/feedback", json={"date": "2026-09-08", "notes": "nota do dia"})
+    client.put(
+        "/feedback",
+        json={"date": "2026-09-08", "activity_id": activity_id, "rpe": 6},
+    )
+
+    rows = client.get("/feedback?start=2026-09-01&end=2026-09-30").json()
+    assert len(rows) == 2
+
+
+def test_rpe_out_of_scale_is_rejected(client, db):
+    response = client.put("/feedback", json={"date": "2026-09-08", "rpe": 50})
+
+    assert response.status_code == 422
+
+
+def test_feedback_for_unknown_activity_is_404(client):
+    response = client.put(
+        "/feedback",
+        json={"date": "2026-09-08",
+              "activity_id": "22222222-2222-2222-2222-222222222222", "rpe": 5},
+    )
+    assert response.status_code == 404
+
+
+def test_feedback_appears_in_the_week(client, db):
+    """O feedback precisa chegar na timeline — é lá que ele explica o treino."""
+    activity_id = add(db, date(2026, 9, 9))
+    client.put(
+        "/feedback",
+        json={"date": "2026-09-09", "activity_id": activity_id, "rpe": 9,
+              "feel": 2, "notes": "acabei quebrado"},
+    )
+
+    week = client.get("/week?reference=2026-09-09&zones=false").json()
+    wednesday = week["days"][2]
+
+    assert wednesday["rpe"] == 9
+    assert wednesday["feel"] == 2
+    assert wednesday["notes"] == "acabei quebrado"
+
+
+def test_feedback_can_be_deleted(client, db):
+    saved = client.put("/feedback", json={"date": "2026-09-08", "rpe": 5}).json()
+
+    client.delete(f"/feedback/{saved['id']}")
+
+    assert client.get("/feedback?start=2026-09-01&end=2026-09-30").json() == []
+
+
+# ---------------------------------------------------------------------------
+# Subidas, execução, densidade e capacidade
+# ---------------------------------------------------------------------------
+
+
+def climb_profile(seconds: int, gain: float, distance: float) -> dict:
+    """Streams de uma subida de inclinação constante."""
+    import numpy as np
+
+    return {
+        "altitude": list(np.linspace(700.0, 700.0 + gain, seconds)),
+        "distance": list(np.linspace(0.0, distance, seconds)),
+    }
+
+
+def add_with_terrain(db, day: date, power: list[float], terrain: dict) -> str:
+    """Grava uma atividade com potência, altitude e distância."""
+    store = CatalogStore(db)
+    activity_id = store.upsert_activity(
+        Activity(
+            source="fit", sport_type="cycling",
+            started_at=datetime(day.year, day.month, day.day, 7, tzinfo=timezone.utc),
+            elapsed_time_s=len(power), moving_time_s=len(power),
+            distance_m=terrain["distance"][-1], elevation_gain_m=400.0, tss=80.0,
+        ),
+        ATHLETE_ID,
+    )
+    store.insert_streams(
+        activity_id,
+        [
+            ActivityStream(
+                time_s=i, power_w=power[i],
+                altitude_m=terrain["altitude"][i], distance_m=terrain["distance"][i],
+            )
+            for i in range(len(power))
+        ],
+    )
+    return activity_id
+
+
+def test_climbs_detected_on_a_sustained_ascent(client, db):
+    terrain = climb_profile(900, 180, 3000)  # 6% em 3 km
+    activity_id = add_with_terrain(db, date(2026, 9, 8), [200.0] * 900, terrain)
+
+    payload = client.get(f"/activities/{activity_id}/climbs").json()
+
+    assert payload["summary"]["count"] == 1
+    climb = payload["climbs"][0]
+    assert climb["avg_gradient_pct"] == pytest.approx(6.0, abs=0.6)
+    assert climb["vam_mh"] == pytest.approx(720, abs=60)
+    assert climb["watts_per_kg"] is None or climb["watts_per_kg"] > 0
+
+
+def test_flat_ride_reports_no_climbs(client, db):
+    import numpy as np
+
+    flat = {"altitude": [700.0] * 900, "distance": list(np.linspace(0, 20000, 900))}
+    activity_id = add_with_terrain(db, date(2026, 9, 8), [200.0] * 900, flat)
+
+    payload = client.get(f"/activities/{activity_id}/climbs").json()
+
+    assert payload["summary"]["count"] == 0
+    assert payload["climbs"] == []
+
+
+def test_climbs_unknown_activity_is_404(client):
+    missing = "22222222-2222-2222-2222-222222222222"
+
+    assert client.get(f"/activities/{missing}/climbs").status_code == 404
+
+
+def test_pacing_flags_starting_too_hard(client, db):
+    power = [300.0] * 600 + [250.0] * 600 + [190.0] * 600 + [120.0] * 600
+    activity_id = add(db, date(2026, 9, 8), power=power)
+
+    payload = client.get(f"/activities/{activity_id}/pacing").json()
+
+    assert payload["verdict"] == "saiu forte demais"
+    assert len(payload["quarters"]) == 4
+    assert payload["ftp_w_at_time"] == 250.0
+
+
+def test_pacing_without_power_is_422(client, db):
+    activity_id = add(db, date(2026, 9, 8))
+
+    assert client.get(f"/activities/{activity_id}/pacing").status_code == 422
+
+
+def test_load_density_bins_power_and_hr(client, db):
+    store = CatalogStore(db)
+    activity_id = store.upsert_activity(
+        Activity(source="fit", sport_type="cycling",
+                 started_at=datetime(2026, 9, 8, 7, tzinfo=timezone.utc),
+                 elapsed_time_s=600, moving_time_s=600),
+        ATHLETE_ID,
+    )
+    store.insert_streams(
+        activity_id,
+        [ActivityStream(time_s=i, power_w=205.0, hr_bpm=152.0) for i in range(600)],
+    )
+
+    payload = client.get(f"/activities/{activity_id}/load-density").json()
+
+    assert len(payload["cells"]) == 1
+    assert payload["cells"][0]["power_w"] == 200
+    assert payload["cells"][0]["hr_bpm"] == 150
+
+
+def test_load_density_without_hr_is_empty(client, db):
+    activity_id = add(db, date(2026, 9, 8), power=[200.0] * 600)
+
+    assert client.get(f"/activities/{activity_id}/load-density").json()["cells"] == []
+
+
+def test_capacity_profile_compares_recent_to_best(client, db):
+    """O recorde antigo é a régua; a janela recente é o que se mede contra ela."""
+    store = CatalogStore(db)
+    for day, watts in [(date(2024, 5, 1), 300.0), (date.today(), 250.0)]:
+        activity_id = store.upsert_activity(
+            Activity(source="fit", sport_type="cycling",
+                     started_at=datetime(day.year, day.month, day.day, 7, tzinfo=timezone.utc),
+                     elapsed_time_s=1800),
+            ATHLETE_ID,
+        )
+        store.save_power_curve(activity_id, day, {300: watts, 1200: watts - 40})
+
+    payload = client.get("/capacity-profile?days=90").json()
+
+    points = {p["duration_s"]: p for p in payload["points"]}
+    assert points[300]["best_w"] == pytest.approx(300.0)
+    assert points[300]["current_w"] == pytest.approx(250.0)
+    assert points[300]["classification"] == "limitador"
+
+
+def test_capacity_profile_excludes_other_sports(client, db):
+    """Potência de corrida usa outra escala e inflaria o recorde."""
+    store = CatalogStore(db)
+    run_id = store.upsert_activity(
+        Activity(source="fit", sport_type="running",
+                 started_at=datetime(2024, 5, 1, 7, tzinfo=timezone.utc),
+                 elapsed_time_s=1800),
+        ATHLETE_ID,
+    )
+    store.save_power_curve(run_id, date(2024, 5, 1), {300: 400.0})
+
+    payload = client.get("/capacity-profile?days=90&sport=cycling").json()
+
+    points = {p["duration_s"]: p for p in payload["points"]}
+    assert points[300]["best_w"] is None, "corrida não entra no perfil de bike"

@@ -59,7 +59,8 @@ def get_activity_streams(activity_id: str, every_n: int = 10, db=Depends(get_db)
     """
     rows = db.execute(
         """
-        SELECT time_s, lat, lon, altitude_m, power_w, hr_bpm, speed_ms
+        SELECT time_s, lat, lon, altitude_m, distance_m, power_w, hr_bpm,
+               speed_ms, cadence_rpm
         FROM activity_streams
         WHERE activity_id = ?
           AND lat IS NOT NULL
