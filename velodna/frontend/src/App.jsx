@@ -13,8 +13,7 @@
  */
 import { useEffect, useState } from "react"
 
-import TodayView from "./views/TodayView"
-import WeekView from "./views/WeekView"
+import SummaryView from "./views/SummaryView"
 import FitnessView from "./views/FitnessView"
 import ActivityView from "./views/ActivityView"
 import PlanningView from "./views/PlanningView"
@@ -24,8 +23,7 @@ import { api } from "./lib/api"
 import "./styles/tokens.css"
 
 const STATE_VIEWS = [
-  { id: "today", label: "Hoje" },
-  { id: "week", label: "Semana" },
+  { id: "summary", label: "Resumo" },
   { id: "fitness", label: "Fitness" },
 ]
 
@@ -44,7 +42,7 @@ function initialTheme() {
 }
 
 export default function App() {
-  const [view, setView] = useState("week")
+  const [view, setView] = useState("summary")
   const [theme, setTheme] = useState(initialTheme)
   const [zones, setZones] = useState(null)
   const [focusedActivity, setFocusedActivity] = useState(null)
@@ -92,7 +90,7 @@ export default function App() {
               letterSpacing: "-0.01em",
               cursor: "pointer",
             }}
-            onClick={() => setView("week")}
+            onClick={() => setView("summary")}
           >
             VeloDNA
           </strong>
@@ -153,8 +151,12 @@ export default function App() {
       </header>
 
       <main>
-        {view === "today" && <TodayView onGoToWeek={() => setView("week")} />}
-        {view === "week" && <WeekView onOpenActivity={openActivity} />}
+        {view === "summary" && (
+          <SummaryView
+            onGoToFitness={() => setView("fitness")}
+            onOpenActivity={openActivity}
+          />
+        )}
         {view === "fitness" && <FitnessView athleteWeightKg={zones?.weight_kg} />}
         {view === "activity" && <ActivityView initialActivity={focusedActivity} />}
         {view === "planning" && <PlanningView />}

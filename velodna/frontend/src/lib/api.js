@@ -144,6 +144,8 @@ export const api = {
       get(`/activities/${id}/durability`, { params, fallback: null }),
   },
 
+  today: () => get("/today", { fallback: null }),
+
   analysis: {
     climbs: (id, params) => get(`/activities/${id}/climbs`, { params, fallback: null }),
     pacing: (id) => get(`/activities/${id}/pacing`, { fallback: null }),

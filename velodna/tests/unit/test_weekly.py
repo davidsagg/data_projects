@@ -372,3 +372,98 @@ def test_week_without_health_has_no_averages(store: CatalogStore, athlete: str):
 
     assert week.avg_sleep_hours is None
     assert week.avg_hrv_ms is None
+
+
+# ---------------------------------------------------------------------------
+# Métricas do relatório semanal (referência: guia do atleta, TrainingPeaks)
+# ---------------------------------------------------------------------------
+
+
+def test_tss_per_hour_separates_volume_from_intensity(store: CatalogStore, athlete: str):
+    """Duas semanas de mesmo TSS e horas diferentes não são a mesma semana."""
+    add_activity(store, athlete, date(2026, 9, 8), tss=200.0)  # 1h por atividade
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.total_hours == pytest.approx(1.0)
+    assert week.tss_per_hour == pytest.approx(200.0)
+
+
+def test_tss_per_hour_is_none_without_time(store: CatalogStore, athlete: str):
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.tss_per_hour is None
+
+
+def test_medians_resist_a_single_outlier(store: CatalogStore, athlete: str):
+    """Uma saída longa e leve não pode descrever a semana inteira.
+
+    É por isso que o relatório usa mediana e não média: com NP de 150, 160, 170
+    e um passeio de 80, a média cai para 140 — valor que nenhum treino teve.
+    """
+    for day, np_w in [(8, 150.0), (9, 160.0), (10, 170.0), (11, 80.0)]:
+        activity_id = add_activity(store, athlete, date(2026, 9, day))
+        store.conn.execute(
+            "UPDATE activities SET normalized_power_w = ?, intensity_factor = ? "
+            "WHERE id = ?",
+            [np_w, np_w / 250, activity_id],
+        )
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.np_median == pytest.approx(155.0)
+    assert week.if_median == pytest.approx(0.62, abs=0.01)
+
+
+def test_medians_are_none_without_power(store: CatalogStore, athlete: str):
+    add_activity(store, athlete, date(2026, 9, 8))
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.np_median is None
+    assert week.if_median is None
+
+
+def test_compliance_per_activity(store: CatalogStore, athlete: str):
+    """O agregado da semana esconde o treino que saiu pela metade."""
+    from planning.calendar import create_planned_workout
+
+    activity_id = add_activity(store, athlete, date(2026, 9, 8), tss=78.0)
+    workout_id = create_planned_workout(
+        store.conn, athlete, {"date": date(2026, 9, 8), "planned_tss": 100.0}
+    )
+    store.conn.execute(
+        "UPDATE planned_workouts SET activity_id = ? WHERE id = ?",
+        [activity_id, workout_id],
+    )
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+    activity = week.activities[0]
+
+    assert activity["planned_tss"] == pytest.approx(100.0)
+    assert activity["compliance_pct"] == pytest.approx(78.0)
+
+
+def test_compliance_is_none_without_a_plan(store: CatalogStore, athlete: str):
+    """Sem plano ligado não há o que comparar — 100% seria mentira."""
+    add_activity(store, athlete, date(2026, 9, 8), tss=78.0)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+
+    assert week.activities[0]["compliance_pct"] is None
+
+
+def test_activity_carries_feedback_and_decoupling(store: CatalogStore, athlete: str):
+    activity_id = add_activity(store, athlete, date(2026, 9, 8))
+    store.conn.execute(
+        "UPDATE activities SET decoupling_pct = 7.5, avg_cadence_rpm = 84 WHERE id = ?",
+        [activity_id],
+    )
+    store.upsert_feedback(athlete, date(2026, 9, 8), activity_id, rpe=8, feel=3)
+
+    week = build_week_summary(store, athlete, date(2026, 9, 9), with_zones=False)
+    activity = week.activities[0]
+
+    assert activity["decoupling_pct"] == pytest.approx(7.5)
+    assert activity["avg_cadence_rpm"] == pytest.approx(84)
+    assert activity["rpe"] == 8

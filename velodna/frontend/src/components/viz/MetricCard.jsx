@@ -1,10 +1,16 @@
 /*
- * Card de métrica — um valor com rótulo, delta e contexto.
+ * Card de métrica — um valor com rótulo, contexto e a régua para lê-lo.
  *
- * Regra da spec que este componente impõe: nenhum número sem contexto. Se não
- * houver delta nem baseline, ao menos a unidade acompanha — "48" sozinho não
- * informa, "48 ms, +3 vs. média" informa.
+ * Regra que este componente impõe: nenhum número sem contexto. "48" sozinho não
+ * informa; "48 ms, +3 vs. média" informa.
+ *
+ * O `hint` é a régua — a faixa de referência que o guia do atleta traz como
+ * "exemplo" em cada bloco. Sem ela, "TSS/hora 43" é um número que o atleta tem
+ * de lembrar como interpretar; com ela, lê-se na hora. Fica num rodapé
+ * visualmente rebaixado, porque é material de consulta e não de decisão.
  */
+import Sparkline from "./Sparkline"
+
 export default function MetricCard({
   label,
   value,
@@ -12,6 +18,10 @@ export default function MetricCard({
   context,
   statusToken,
   onClick,
+  trend,
+  trendToken = "--ctl",
+  trendBand,
+  hint,
 }) {
   const interactive = Boolean(onClick)
 
@@ -49,9 +59,30 @@ export default function MetricCard({
         )}
       </div>
 
+      {trend?.length > 1 && (
+        <Sparkline values={trend} token={trendToken} band={trendBand} />
+      )}
+
       {context && (
         <span style={{ fontSize: "var(--fs-small)", color: "var(--text-secondary)" }}>
           {context}
+        </span>
+      )}
+
+      {hint && (
+        <span
+          style={{
+            fontSize: "var(--fs-micro)",
+            lineHeight: 1.5,
+            color: "var(--text-tertiary)",
+            background: "var(--surface-sunken)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-sm)",
+            padding: "var(--space-2) var(--space-3)",
+            marginTop: "var(--space-1)",
+          }}
+        >
+          {hint}
         </span>
       )}
     </div>

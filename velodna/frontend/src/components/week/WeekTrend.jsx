@@ -5,7 +5,7 @@
  * responde "esta semana é normal para mim?". Sem a segunda, 568 TSS não diz
  * nada — pode ser recorde ou rotina.
  */
-import { num } from "../../lib/format"
+import { dayMonth, num } from "../../lib/format"
 
 export default function WeekTrend({ weeks, currentStart, onSelectWeek }) {
   if (!weeks?.length) {
@@ -62,6 +62,44 @@ export default function WeekTrend({ weeks, currentStart, onSelectWeek }) {
             </button>
           )
         })}
+      </div>
+
+      {/* Sem rótulo, oito barras flutuam sem dizer qual semana é qual. */}
+      <div style={{ display: "flex", gap: "var(--space-2)" }}>
+        {weeks.map((week) => (
+          <span
+            key={week.week_start}
+            className="tabular"
+            style={{
+              flex: 1,
+              textAlign: "center",
+              fontSize: "var(--fs-micro)",
+              color:
+                week.week_start === currentStart
+                  ? "var(--text-primary)"
+                  : "var(--text-tertiary)",
+            }}
+          >
+            {dayMonth(week.week_start)}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: "var(--space-2)" }}>
+        {weeks.map((week) => (
+          <span
+            key={week.week_start}
+            className="tabular"
+            style={{
+              flex: 1,
+              textAlign: "center",
+              fontSize: "var(--fs-micro)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {num(week.total_tss, 0)}
+          </span>
+        ))}
       </div>
 
       <div

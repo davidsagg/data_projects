@@ -28,6 +28,7 @@ from analytics.intervals import (
     group_into_sets,
 )
 from analytics.pacing_analysis import analyze_pacing, load_density
+from analytics.recommendation import recommend
 from analytics.timeseries import load_series
 from analytics.weekly import build_week_series, build_week_summary
 from analytics.wprime_model import WPrimeModel
@@ -283,6 +284,117 @@ def _decimate(values: list[float], target: int) -> list[float]:
         return [round(v, 1) for v in values]
     step = len(values) / target
     return [round(values[int(i * step)], 1) for i in range(target)]
+
+
+@router.get("/today")
+def get_today(db=Depends(get_db)):
+    """Painel do dia: prontidão, forma, semana em curso e o que ela sugere.
+
+    Junta num só lugar os sinais que estavam espalhados por quatro telas. A
+    recomendação vem com os sinais que a produziram — recomendação sem os
+    sinais à vista é palpite com cara de resultado.
+    """
+    store = CatalogStore(db)
+    athlete_id = _athlete_or_404(db)
+
+    pmc = query_rows(
+        db,
+        """
+        SELECT date, ctl, atl, tsb, daily_tss FROM training_load
+        WHERE athlete_id = ? ORDER BY date DESC LIMIT 90
+        """,
+        [athlete_id],
+    )
+    pmc.reverse()
+    latest = pmc[-1] if pmc else {}
+
+    week = build_week_summary(store, athlete_id, date.today(), with_zones=False)
+    readiness = _readiness_today(db, athlete_id)
+    profile = _capacity_limiters(db, athlete_id)
+
+    advice = recommend(
+        readiness=readiness.get("score") if readiness else None,
+        tsb=latest.get("tsb"),
+        ctl=latest.get("ctl"),
+        week_tss=week.total_tss,
+        baseline_weekly_tss=week.baseline_tss,
+        limiters=profile,
+    )
+
+    return {
+        "date": date.today().isoformat(),
+        "readiness": readiness,
+        "form": {
+            "ctl": latest.get("ctl"),
+            "atl": latest.get("atl"),
+            "tsb": latest.get("tsb"),
+        },
+        "pmc": pmc,
+        "week": {
+            "total_tss": week.total_tss,
+            "baseline_tss": week.baseline_tss,
+            "session_count": week.session_count,
+            "total_km": week.total_km,
+            "days": [d.to_dict() for d in week.days],
+        },
+        "recommendation": advice.to_dict(),
+    }
+
+
+def _readiness_today(db, athlete_id: str) -> dict | None:
+    """Prontidão de hoje, com as medidas que a compuseram.
+
+    Reusa `ReadinessCalculator` pela mesma porta que `/readiness/today` usa —
+    duplicar a fórmula aqui faria as duas telas divergirem no dia em que uma
+    delas fosse ajustada.
+    """
+    from health.readiness import ReadinessCalculator
+    from ingestion.garmin_health_client import HealthDaily
+
+    today = date.today()
+    metrics = query_row(
+        db,
+        """
+        SELECT date, hrv_rmssd_ms, resting_hr_bpm, sleep_hours, body_battery,
+               sleep_quality_score, stress_level
+        FROM health_metrics WHERE athlete_id = ? ORDER BY date DESC LIMIT 1
+        """,
+        [athlete_id],
+    )
+    if not metrics:
+        return None
+
+    load = query_row(db, "SELECT tsb FROM training_load WHERE date = ?", [today])
+
+    health = HealthDaily(
+        date=today,
+        sleep_score=metrics.get("sleep_quality_score"),
+        hrv_rmssd_ms=metrics.get("hrv_rmssd_ms"),
+        body_battery_max=metrics.get("body_battery"),
+    )
+    score = ReadinessCalculator().calculate(
+        health, {"tsb": float(load["tsb"]) if load and load.get("tsb") else 0.0}
+    )
+
+    return {
+        "score": score,
+        "recommendation": ReadinessCalculator().get_recommendation(score),
+        "measured_on": metrics["date"].isoformat(),
+        "is_stale": (today - metrics["date"]).days > 1,
+        "hrv_rmssd_ms": metrics.get("hrv_rmssd_ms"),
+        "resting_hr_bpm": metrics.get("resting_hr_bpm"),
+        "sleep_hours": metrics.get("sleep_hours"),
+        "sleep_quality_score": metrics.get("sleep_quality_score"),
+        "body_battery": metrics.get("body_battery"),
+    }
+
+
+def _capacity_limiters(db, athlete_id: str) -> list[str]:
+    """Durações em que o atleta está mais abaixo do próprio recorde."""
+    end = date.today()
+    recent = _aggregate_curve(db, athlete_id, end - timedelta(days=90), end, "cycling")
+    best = _aggregate_curve(db, athlete_id, None, None, "cycling")
+    return build_profile(recent, best)["limiters"]
 
 
 # ---------------------------------------------------------------------------

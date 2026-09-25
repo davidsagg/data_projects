@@ -55,6 +55,21 @@
   --series-4: #a8761b;
   --series-5: #6b4fb8;
 
+  /* ── Zonas de potência (Coggan) — convenção do TrainingPeaks ─────────── */
+  /* Aqui a convenção de domínio vence a regra geral de paleta. Zonas são
+     ordinais e o guia de dataviz pediria rampa sequencial, mas o atleta lê
+     estas cores no relatório semanal dele toda semana: frio → quente, do azul
+     da recuperação ao vermelho escuro do neuromuscular. Divergir criaria dois
+     vocabulários para a mesma coisa. O rótulo e o percentual acompanham sempre,
+     então a identidade nunca depende só da cor. */
+  --zone-1: #7b93b5;
+  --zone-2: #3d9970;
+  --zone-3: #d6a828;
+  --zone-4: #dd7b33;
+  --zone-5: #cc4444;
+  --zone-6: #9e2b2b;
+  --zone-7: #4a2033;
+
   /* ── Rampa sequencial — magnitude contínua e zonas ────────────────────── */
   --seq-100: #d9e6f7;
   --seq-250: #a3c2e8;
@@ -140,6 +155,14 @@
     --series-4: #b8862f;
     --series-5: #8b7bd8;
 
+    --zone-1: #8ba3c4;
+    --zone-2: #4aad80;
+    --zone-3: #e0b641;
+    --zone-4: #e88c47;
+    --zone-5: #dd5a5a;
+    --zone-6: #b84040;
+    --zone-7: #7a4058;
+
     --seq-100: #1e3350;
     --seq-250: #2c5385;
     --seq-400: #5b8dd6;
@@ -185,6 +208,14 @@
   --series-3: #3e9b79;
   --series-4: #b8862f;
   --series-5: #8b7bd8;
+
+  --zone-1: #8ba3c4;
+  --zone-2: #4aad80;
+  --zone-3: #e0b641;
+  --zone-4: #e88c47;
+  --zone-5: #dd5a5a;
+  --zone-6: #b84040;
+  --zone-7: #7a4058;
 
   --seq-100: #1e3350;
   --seq-250: #2c5385;
@@ -443,4 +474,25 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
   * { transition-duration: 0.01ms !important; }
+}
+
+/* --- Grade de métricas ---------------------------------------------------- */
+
+/*
+ * Seis cards por linha no canvas alvo de 1280px. Abaixo disso, três e depois
+ * dois: seis colunas em tela estreita espremeriam o número e a nota de
+ * referência a ponto de nenhum dos dois ser legível.
+ */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--card-gap);
+}
+
+@media (max-width: 1180px) {
+  .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -118,8 +118,8 @@ export default function FitnessView({ athleteWeightKg }) {
       {/* Tendências de saúde no mesmo horizonte de meses: é aqui que a leitura
           lenta pertence, e mantê-las junto do PMC — em vez de numa aba "Saúde" —
           é o que impede o produto de separar treino de corpo. */}
-      <HRVChart data={state.health} />
-      <WellnessChart data={state.health} />
+      <HRVChart health={state.health} />
+      <WellnessChart health={state.health} />
       <CorrelationPanel />
 
       <ExportPanel />

@@ -15,3 +15,10 @@ data/new_activities/
 *.duckdb.*
 mlruns/
 .DS_Store
+
+# Referências de design. NÃO versionar: o monorepo é público, e esta pasta
+# guarda o relatório semanal real do atleta (nome, FTP, frequências cardíacas,
+# log de treinos — dado pessoal de saúde) e material de marca de terceiros.
+# Servem de referência local para o desenho da interface, não de artefato do
+# projeto.
+docs/design-refs/

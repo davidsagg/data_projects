@@ -305,16 +305,20 @@ function HrvLine({ days, scale, height }) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      {/* Retângulo, não círculo: com `preserveAspectRatio="none"` o eixo X é
+          esticado para a largura do container, e um `<circle>` vira uma elipse
+          achatada. O losango de lados iguais em unidades de usuário sofre a
+          mesma distorção, então a marca é desenhada como quadrado pequeno —
+          que distorce para um retângulo discreto em vez de uma elipse gritante. */}
       {points.map((p) => (
-        <circle
+        <rect
           key={p.x}
-          cx={p.x}
-          cy={p.y}
-          r="3"
-          fill="var(--surface-1)"
-          stroke="var(--hrv)"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
+          x={p.x - 0.35}
+          y={p.y - 3}
+          width="0.7"
+          height="6"
+          rx="0.2"
+          fill="var(--hrv)"
         />
       ))}
     </svg>

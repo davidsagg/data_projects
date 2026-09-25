@@ -14,9 +14,11 @@ import ChartFrame from "../viz/ChartFrame"
 import { api } from "../../lib/api"
 import { duration, num } from "../../lib/format"
 
+/* Mesma convenção Coggan da distribuição semanal — duas paletas para a mesma
+   grandeza fariam o atleta reaprender a leitura a cada tela. */
 const ZONE_TOKEN = {
-  Z1: "--seq-100", Z2: "--seq-250", Z3: "--seq-400",
-  Z4: "--seq-550", Z5: "--seq-700", Z6: "--seq-700", Z7: "--seq-700",
+  Z1: "--zone-1", Z2: "--zone-2", Z3: "--zone-3",
+  Z4: "--zone-4", Z5: "--zone-5", Z6: "--zone-6", Z7: "--zone-7",
 }
 
 const VERDICT_TOKEN = {

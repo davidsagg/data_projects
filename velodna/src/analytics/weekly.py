@@ -139,6 +139,32 @@ class WeekSummary:
     baseline_tss: float | None = None
 
     @property
+    def tss_per_hour(self) -> float | None:
+        """Intensidade média da semana — TSS dividido pelas horas pedaladas.
+
+        Separa duas semanas de mesmo volume mas exigências diferentes. Perto de
+        40 é semana de base; acima de 55–60 há trabalho consistente de limiar ou
+        intervalado, mesmo com poucas horas.
+        """
+        if self.total_hours <= 0:
+            return None
+        return round(self.total_tss / self.total_hours, 1)
+
+    @property
+    def np_median(self) -> float | None:
+        """NP típica dos treinos da semana.
+
+        Mediana, não média: uma única saída longa e leve puxaria a média para
+        baixo e descreveria mal a semana. A mediana resiste ao outlier.
+        """
+        return _median([a.get("normalized_power_w") for a in self.activities])
+
+    @property
+    def if_median(self) -> float | None:
+        """IF típico dos treinos da semana."""
+        return _median([a.get("intensity_factor") for a in self.activities], digits=3)
+
+    @property
     def compliance_pct(self) -> float | None:
         """Percentual do TSS planejado que foi cumprido."""
         if self.planned_tss <= 0:
@@ -202,6 +228,9 @@ class WeekSummary:
             "planned_tss": self.planned_tss,
             "compliance_pct": self.compliance_pct,
             "total_hours": self.total_hours,
+            "tss_per_hour": self.tss_per_hour,
+            "np_median": self.np_median,
+            "if_median": self.if_median,
             "total_km": self.total_km,
             "total_elevation_m": self.total_elevation_m,
             "session_count": self.session_count,
@@ -324,6 +353,20 @@ def build_week_series(
 # ---------------------------------------------------------------------------
 
 
+def _median(values: list, digits: int = 1) -> float | None:
+    """Mediana dos valores presentes, ou None se não houver nenhum."""
+    present = sorted(v for v in values if v is not None)
+    if not present:
+        return None
+    middle = len(present) // 2
+    value = (
+        present[middle]
+        if len(present) % 2
+        else (present[middle - 1] + present[middle]) / 2
+    )
+    return round(float(value), digits)
+
+
 def _mean(values: list) -> float | None:
     """Média dos valores presentes, ou None se não houver nenhum."""
     present = [v for v in values if v is not None]
@@ -435,20 +478,41 @@ def _bucket_dict(bucket: ZoneBucket | None) -> dict | None:
 
 
 def _activities_between(conn, athlete_id: str, start: date, end: date) -> list[dict]:
-    """Atividades da semana, com o que o resumo precisa."""
-    return rows(
+    """Atividades da semana, com o plano e o feedback ligados."""
+    records = rows(
         conn,
         """
-        SELECT id, CAST(started_at AS DATE) AS date, started_at, sport_type,
-               elapsed_time_s, moving_time_s, distance_m, elevation_gain_m,
-               tss, tss_source, normalized_power_w, intensity_factor,
-               avg_hr_bpm, efficiency_factor
-        FROM activities
-        WHERE athlete_id = ? AND CAST(started_at AS DATE) BETWEEN ? AND ?
-        ORDER BY started_at
+        SELECT a.id, CAST(a.started_at AS DATE) AS date, a.started_at, a.sport_type,
+               a.elapsed_time_s, a.moving_time_s, a.distance_m, a.elevation_gain_m,
+               a.tss, a.tss_source, a.normalized_power_w, a.intensity_factor,
+               a.avg_power_w, a.max_power_w, a.avg_hr_bpm, a.max_hr_bpm,
+               a.avg_cadence_rpm, a.efficiency_factor, a.decoupling_pct,
+               a.ftp_w_at_time,
+               p.name          AS planned_name,
+               p.planned_tss   AS planned_tss,
+               p.planned_duration_s AS planned_duration_s,
+               f.rpe           AS rpe,
+               f.feel          AS feel,
+               f.notes         AS notes
+        FROM activities a
+        LEFT JOIN planned_workouts p ON p.activity_id = a.id
+        LEFT JOIN activity_feedback f ON f.activity_id = a.id
+        WHERE a.athlete_id = ? AND CAST(a.started_at AS DATE) BETWEEN ? AND ?
+        ORDER BY a.started_at
         """,
         [athlete_id, start, end],
     )
+
+    # Compliance é o percentual do TSS planejado que o treino de fato cumpriu.
+    # Sem plano ligado, não há o que comparar — e 100% seria mentira.
+    for activity in records:
+        planned = activity.get("planned_tss")
+        done = activity.get("tss")
+        activity["compliance_pct"] = (
+            round(done / planned * 100, 1) if planned and done else None
+        )
+
+    return records
 
 
 def _planned_tss(conn, athlete_id: str, start: date, end: date) -> float:
