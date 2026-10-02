@@ -1,44 +1,50 @@
 /*
  * Tokens de design do VeloDNA.
  *
- * Base: `velodna_design_benchmark_v2.md` — estética calma, desktop-first, muito
- * espaço negativo. Duas coisas mudaram em relação à spec, e por motivo:
+ * v2.4 — superfícies frias, no estilo de painel do `health_tracker.html`
+ * (docs/design-refs) e do intervals.icu. A versão anterior tinha um claro
+ * creme (#f7f7f5) que lia como papel; o fundo agora é cinza-azulado com cards
+ * brancos de borda fina e sombra curta, e os números usam fonte monoespaçada
+ * para alinhar dígitos em tabelas e cards.
  *
- * 1. A spec é dark-only. O app tem alternador de tema, então cada cor semântica
- *    ganhou um par claro, escolhido contra a superfície clara — não é o mesmo
- *    hex reaproveitado, que perderia contraste.
+ * O que NÃO mudou, de propósito:
  *
- * 2. As cores da spec não sobrevivem ao validador de paleta como conjunto: o
- *    verde sálvia e o coral ficavam a ΔE 4,5 sob deuteranopia (o limite é 8), e
- *    sálvia e lavanda liam como cinza. Mantive a intenção — dessaturado, calmo —
- *    e re-escalonei até passar. O azul da spec (#5B8DD6) sobreviveu intacto.
- *    Validado com o script do skill de dataviz nos dois temas; não trocar um hex
- *    isolado sem revalidar o conjunto.
+ * 1. As cores das séries (CTL, ATL, TSB, HRV...). Foram revalidadas contra as
+ *    superfícies novas com o script do skill de dataviz e continuam passando
+ *    nos dois temas — trocar um hex isolado exige revalidar o conjunto.
  *
- * 3. A spec pede um arco-íris frio→quente para as zonas de potência. Zonas são
- *    ordinais, não categóricas, e arco-íris é anti-padrão reconhecido — viraram
- *    rampa sequencial de um hue, que é como o olho já lê "mais intenso".
+ * 2. As zonas de potência seguem a convenção do TrainingPeaks (frio → quente),
+ *    que é o vocabulário do relatório semanal do atleta. Zonas são ordinais e
+ *    vêm sempre com rótulo; o validador categórico não é o teste certo para elas.
+ *
+ * Novas: as quatro modalidades (rua, rolo, força, outros), validadas como
+ * conjunto — o verde e o laranja do claro foram escurecidos até 3:1 de
+ * contraste sobre o branco.
  */
 
 :root {
   color-scheme: light;
 
-  /* ── Superfícies — três níveis, diferença sutil ───────────────────────── */
-  --surface-page: #f7f7f5;
-  --surface-1: #fcfcfb;
+  /* ── Superfícies — fundo frio, cards brancos ──────────────────────────── */
+  --surface-page: #f6f8fb;
+  --surface-1: #ffffff;
   --surface-2: #ffffff;
-  --surface-sunken: #efefec;
+  --surface-sunken: #eef1f6;
 
-  --text-primary: #16181d;
-  --text-secondary: #5a6070;
-  --text-tertiary: #8c93a3;
-  --text-muted: #8c93a3;
+  --text-primary: #10161d;
+  --text-secondary: #46566b;
+  --text-tertiary: #66768a;
+  --text-muted: #8291a3;
 
-  --border: rgba(22, 24, 29, 0.1);
-  --border-subtle: #e4e5e2;
-  --border-strong: #cdcfcb;
-  --gridline: #e4e5e2;
-  --axis: #cdcfcb;
+  --border: rgba(16, 22, 29, 0.1);
+  --border-subtle: #dde3ea;
+  --border-strong: #c7ced7;
+  --gridline: #e3e7ec;
+  --axis: #c7ced7;
+
+  --accent: #2a78d6;
+  --accent-fill: #2a78d6;  /* fundo de controle ativo, texto branco por cima */
+  --shadow: 0 1px 2px rgba(16, 22, 29, 0.04), 0 8px 24px -12px rgba(16, 22, 29, 0.12);
 
   /* ── Séries semânticas — validadas como conjunto ──────────────────────── */
   --ctl: #2f6fbf;
@@ -54,6 +60,12 @@
   --series-3: #1c8460;
   --series-4: #a8761b;
   --series-5: #6b4fb8;
+
+  /* ── Modalidades — rua, rolo, força; "outros" é cinza de propósito ────── */
+  --mod-outdoor: #2a78d6;
+  --mod-indoor: #159a6a;
+  --mod-strength: #e2622e;
+  --mod-other: #a3afbd;
 
   /* ── Zonas de potência (Coggan) — convenção do TrainingPeaks ─────────── */
   /* Aqui a convenção de domínio vence a regra geral de paleta. Zonas são
@@ -84,41 +96,54 @@
   --status-critical: #b3332f;
   --delta-up: #1c8460;
 
+  /* Fundos das etiquetas de estado. O texto da etiqueta fica em tinta de
+     texto; a cor de estado vai no ícone e no fundo — nunca só na letra. */
+  --status-good-bg: #e3f4ec;
+  --status-warning-bg: #fbf0d9;
+  --status-serious-bg: #fbe9e1;
+  --status-critical-bg: #fbe5e4;
+  --status-neutral-bg: #eef1f6;
+
   /* ── Tipografia ───────────────────────────────────────────────────────── */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  --font: 'Public Sans Variable', 'Public Sans', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Manrope Variable', 'Manrope', -apple-system, BlinkMacSystemFont,
+    system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace;
 
   --fs-hero: 4rem;        /* 64px — um por tela, nunca dois */
-  --fs-figure: 2rem;      /* 32px — métrica de card */
+  --fs-figure: 1.75rem;   /* 28px — métrica de card */
   --fs-lead: 1.125rem;    /* 18px */
   --fs-body: 0.9375rem;   /* 15px */
   --fs-small: 0.8125rem;  /* 13px */
   --fs-micro: 0.6875rem;  /* 11px — label caixa alta */
 
-  --tracking-label: 0.1em;
-  --leading-body: 1.7;
+  --tracking-label: 0.06em;
+  --leading-body: 1.6;
 
-  /* ── Espaçamento — escala de 4px, valores altos ───────────────────────── */
+  /* ── Espaçamento — escala de 4px ──────────────────────────────────────── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 24px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
   --space-16: 64px;
   --space-20: 80px;
 
-  --card-padding: var(--space-8);
-  --card-gap: var(--space-6);
-  --page-margin: var(--space-12);
-  --section-gap: var(--space-16);
+  /* Mais denso que antes: o painel de referência mostra mais por tela sem
+     parecer apertado, e é isso que um acervo de 760 atividades pede. */
+  --card-padding: var(--space-5);
+  --card-gap: var(--space-3);
+  --page-margin: var(--space-8);
+  --section-gap: var(--space-8);
   --page-max: 1280px;
 
   --radius-sm: 6px;
-  --radius: 12px;
-  --radius-md: 12px;
+  --radius: 14px;
+  --radius-md: 14px;
   --radius-lg: 20px;
 }
 
@@ -126,21 +151,26 @@
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
 
-    --surface-page: #12161f;
-    --surface-1: #181d28;
-    --surface-2: #1f2530;
-    --surface-sunken: #141921;
+    --surface-page: #0d1117;
+    --surface-1: #151b23;
+    --surface-2: #1b232d;
+    --surface-sunken: #10151c;
 
-    --text-primary: #e8ebf0;
-    --text-secondary: #8e99ab;
-    --text-tertiary: #5c6678;
-    --text-muted: #5c6678;
+    --text-primary: #f2f5f8;
+    --text-secondary: #aab8c7;
+    --text-tertiary: #8291a3;
+    --text-muted: #6f7f91;
 
-    --border: rgba(232, 235, 240, 0.1);
-    --border-subtle: #262d3a;
-    --border-strong: #343d4d;
-    --gridline: #262d3a;
-    --axis: #343d4d;
+    --border: rgba(242, 245, 248, 0.1);
+    --border-subtle: #29323d;
+    --border-strong: #384352;
+    --gridline: #232d39;
+    --axis: #384352;
+
+    --accent: #3987e5;
+  --accent-fill: #2f6fbf;
+    --accent-fill: #2f6fbf;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
 
     --ctl: #5b8dd6;
     --atl: #c4664a;
@@ -154,6 +184,11 @@
     --series-3: #3e9b79;
     --series-4: #b8862f;
     --series-5: #8b7bd8;
+
+    --mod-outdoor: #3987e5;
+    --mod-indoor: #199e70;
+    --mod-strength: #d95926;
+    --mod-other: #5d6b7c;
 
     --zone-1: #8ba3c4;
     --zone-2: #4aad80;
@@ -174,27 +209,37 @@
     --status-serious: #c4664a;
     --status-critical: #d0574f;
     --delta-up: #3e9b79;
+
+    --status-good-bg: rgba(62, 155, 121, 0.16);
+    --status-warning-bg: rgba(184, 134, 47, 0.16);
+    --status-serious-bg: rgba(196, 102, 74, 0.16);
+    --status-critical-bg: rgba(208, 87, 79, 0.18);
+    --status-neutral-bg: #1b232d;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --surface-page: #12161f;
-  --surface-1: #181d28;
-  --surface-2: #1f2530;
-  --surface-sunken: #141921;
+  --surface-page: #0d1117;
+  --surface-1: #151b23;
+  --surface-2: #1b232d;
+  --surface-sunken: #10151c;
 
-  --text-primary: #e8ebf0;
-  --text-secondary: #8e99ab;
-  --text-tertiary: #5c6678;
-  --text-muted: #5c6678;
+  --text-primary: #f2f5f8;
+  --text-secondary: #aab8c7;
+  --text-tertiary: #8291a3;
+  --text-muted: #6f7f91;
 
-  --border: rgba(232, 235, 240, 0.1);
-  --border-subtle: #262d3a;
-  --border-strong: #343d4d;
-  --gridline: #262d3a;
-  --axis: #343d4d;
+  --border: rgba(242, 245, 248, 0.1);
+  --border-subtle: #29323d;
+  --border-strong: #384352;
+  --gridline: #232d39;
+  --axis: #384352;
+
+  --accent: #3987e5;
+  --accent-fill: #2f6fbf;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
 
   --ctl: #5b8dd6;
   --atl: #c4664a;
@@ -208,6 +253,11 @@
   --series-3: #3e9b79;
   --series-4: #b8862f;
   --series-5: #8b7bd8;
+
+  --mod-outdoor: #3987e5;
+  --mod-indoor: #199e70;
+  --mod-strength: #d95926;
+  --mod-other: #5d6b7c;
 
   --zone-1: #8ba3c4;
   --zone-2: #4aad80;
@@ -228,6 +278,12 @@
   --status-serious: #c4664a;
   --status-critical: #d0574f;
   --delta-up: #3e9b79;
+
+  --status-good-bg: rgba(62, 155, 121, 0.16);
+  --status-warning-bg: rgba(184, 134, 47, 0.16);
+  --status-serious-bg: rgba(196, 102, 74, 0.16);
+  --status-critical-bg: rgba(208, 87, 79, 0.18);
+  --status-neutral-bg: #1b232d;
 }
 
 /* --- Reset e base ------------------------------------------------------- */
@@ -256,6 +312,7 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: var(--card-padding);
+  box-shadow: var(--shadow);
   transition: border-color 150ms ease;
 }
 
@@ -268,22 +325,46 @@ body {
   border-color: var(--border-subtle);
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* Título de card e de gráfico — frase, não rótulo em caixa alta. */
 .card-title {
   margin: 0;
-  font-size: var(--fs-micro);
-  font-weight: 500;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
 }
 
 .card-subtitle {
-  margin: var(--space-2) 0 0;
+  margin: 2px 0 0;
+  font-size: var(--fs-small);
+  color: var(--text-tertiary);
+}
+
+/* Títulos de seção da página, acima de um grupo de cards. */
+.section-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.section-lede {
+  margin: 2px 0 0;
   font-size: var(--fs-small);
   color: var(--text-secondary);
 }
 
 .figure {
+  font-family: var(--font-mono);
   font-size: var(--fs-figure);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -291,22 +372,120 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* O número-herói usa a fonte de título: em 64px a monoespaçada fica larga
+   demais e estoura o card ("3,06 W/kg"); alinhamento de dígitos não importa
+   num número sozinho. */
 .figure-hero {
-  font-size: var(--fs-hero);
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 4vw, var(--fs-hero));
+  font-weight: 700;
   letter-spacing: -0.03em;
 }
 
 .unit {
   margin-left: 0.25em;
-  font-size: 0.45em;
-  font-weight: 400;
+  font-family: var(--font);
+  font-size: 0.5em;
+  font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: 0;
 }
 
-.tabular {
+/* Dígitos alinhados. Monoespaçada, como no painel de referência: em coluna de
+   tabela e em card lado a lado, os números passam a se alinhar pela casa. */
+.tabular,
+.num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* --- Etiqueta de estado --------------------------------------------------- */
+
+/* Ícone + texto sobre fundo tingido. A cor de estado nunca carrega o recado
+   sozinha: o texto diz "−3 kg até a meta", a cor só reforça. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-size: 0.71875rem;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--status-neutral-bg);
+  max-width: 100%;
+}
+
+.pill-icon {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.pill--good { background: var(--status-good-bg); }
+.pill--good .pill-icon { background: var(--status-good); }
+.pill--warning { background: var(--status-warning-bg); }
+.pill--warning .pill-icon { background: var(--status-warning); border-radius: 2px; transform: rotate(45deg); }
+.pill--serious { background: var(--status-serious-bg); }
+.pill--serious .pill-icon { background: var(--status-serious); border-radius: 1px; }
+.pill--critical { background: var(--status-critical-bg); }
+.pill--critical .pill-icon { background: var(--status-critical); border-radius: 1px; }
+
+/* --- Tabela de dados ------------------------------------------------------ */
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+table.data th {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: left;
+  white-space: nowrap;
+}
+
+table.data td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+table.data tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+table.data .num,
+table.data th.num {
+  text-align: right;
+}
+
+/* Botão discreto que mostra o gráfico como tabela. */
+.table-toggle {
+  appearance: none;
+  align-self: flex-start;
+  margin-top: var(--space-2);
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .muted {
@@ -315,7 +494,7 @@ body {
 
 .label {
   font-size: var(--fs-micro);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -340,6 +519,21 @@ body {
   gap: var(--card-gap);
 }
 
+/* Item de grid não encolhe abaixo do conteúdo por padrão: uma tabela larga
+   dentro de um card empurrava a página inteira para o lado em tela estreita.
+   Com min-width 0, quem rola é o `.scroll-x` da tabela, não a página. */
+.page > *,
+.section > *,
+.card {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: var(--space-6) var(--space-4) var(--space-12);
+  }
+}
+
 .rule {
   height: 1px;
   background: var(--border-subtle);
@@ -350,6 +544,7 @@ body {
 /* --- Tooltip ------------------------------------------------------------- */
 
 .viz-tooltip {
+  box-shadow: var(--shadow);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -389,6 +584,7 @@ body {
 }
 
 .viz-tooltip-value {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
@@ -441,8 +637,8 @@ body {
 }
 
 .segmented button[aria-pressed="true"] {
-  background: var(--surface-sunken);
-  color: var(--text-primary);
+  background: var(--accent-fill);
+  color: #ffffff;
 }
 
 .toolbar {

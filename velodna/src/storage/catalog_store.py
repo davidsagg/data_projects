@@ -10,6 +10,7 @@ Responsabilidades:
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -18,6 +19,19 @@ from typing import Any
 import duckdb
 
 from storage.models import Activity, ActivityStream
+from storage.query import rows
+
+# Métricas que aceitam meta. O sentido ("menor é melhor" no peso) mora em
+# `analytics.goals`, que é quem lê o progresso.
+GOAL_METRICS = frozenset({
+    "weight_kg",       # peso corporal
+    "weekly_hours",    # horas de treino por semana
+    "ftp_w",           # FTP
+    "w_per_kg",        # FTP ÷ peso
+    "ctl",             # condicionamento (CTL)
+})
+
+MILESTONE_KINDS = ("exame", "plano", "prova", "achado")
 
 # ---------------------------------------------------------------------------
 # DDL — todas as 13 tabelas do schema VeloDNA
@@ -298,6 +312,47 @@ CREATE TABLE IF NOT EXISTS power_curves (
     power_w     FLOAT NOT NULL,
     UNIQUE (activity_id, duration_s)
 );
+
+-- Metadados que só o Strava tem. O `sport` do `.fit` diz `cycling` tanto para o
+-- pedal na rua quanto para o rolo no Zwift, e as duas coisas não são o mesmo
+-- treino: sem vento, sem descida, sem parar no semáforo. `strava_sport_type`
+-- guarda o valor cru (`Ride`, `VirtualRide`, `WeightTraining`...) e `trainer` a
+-- marcação de rolo; a modalidade sai dos dois em `analytics.modality`.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS name VARCHAR;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS strava_sport_type VARCHAR;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS trainer BOOLEAN;
+
+-- Metas do atleta. Um número sem meta não diz se está bom: 6,7 h/semana é muito
+-- para quem quer 5 e pouco para quem quer 10. Uma meta por métrica — trocar a
+-- meta substitui a anterior, não acumula.
+CREATE TABLE IF NOT EXISTS athlete_goals (
+    id           UUID PRIMARY KEY,
+    athlete_id   UUID NOT NULL,
+    metric       VARCHAR NOT NULL,
+    target       FLOAT NOT NULL,
+    target_date  DATE,
+    notes        TEXT,
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (athlete_id, metric)
+);
+
+-- Marcos que mudam a leitura do acervo e não vêm de sensor: exame de
+-- laboratório (ergoespirometria, lactato), início de um bloco de treino, prova
+-- alvo, achado. Um VO2max que caiu 10% com o FTP estável muda o que se espera
+-- das próximas semanas — e não aparece em nenhum stream.
+-- `kind`: 'exame' | 'plano' | 'prova' | 'achado'.
+-- `measurements`: JSON com os valores medidos, ex. {"vo2max_ml_kg_min": 48.2}.
+CREATE TABLE IF NOT EXISTS milestones (
+    id            UUID PRIMARY KEY,
+    athlete_id    UUID NOT NULL,
+    date          DATE NOT NULL,
+    kind          VARCHAR NOT NULL,
+    title         VARCHAR NOT NULL,
+    summary       TEXT,
+    measurements  VARCHAR,
+    source        VARCHAR,
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
 """
 
 # Campos permitidos em insert_health_daily para evitar injeção de coluna
@@ -524,6 +579,169 @@ class CatalogStore:
             "SELECT COUNT(*) FROM activity_streams WHERE activity_id = ?",
             [activity_id],
         ).fetchone()[0]
+
+    def annotate_strava_meta(
+        self,
+        activity_id: str,
+        name: str | None,
+        strava_sport_type: str | None,
+        trainer: bool | None,
+    ) -> None:
+        """Grava nome, tipo de esporte do Strava e marcação de rolo.
+
+        Campos nulos não apagam o que já existe: o resumo do Strava nem sempre
+        traz `trainer`, e uma sincronização parcial não deve desfazer a anterior.
+
+        Args:
+            activity_id: UUID da atividade no catálogo.
+            name: título dado pelo atleta no Strava.
+            strava_sport_type: valor cru de `sport_type` (`Ride`, `VirtualRide`...).
+            trainer: True quando o Strava marca a atividade como de rolo.
+        """
+        self._conn.execute(
+            """
+            UPDATE activities SET
+                name = COALESCE(?, name),
+                strava_sport_type = COALESCE(?, strava_sport_type),
+                trainer = COALESCE(?, trainer)
+            WHERE id = ?
+            """,
+            [name, strava_sport_type, trainer, activity_id],
+        )
+
+    # ------------------------------------------------------------------
+    # Metas e marcos
+    # ------------------------------------------------------------------
+
+    def set_goal(
+        self,
+        athlete_id: str,
+        metric: str,
+        target: float,
+        target_date: date | None = None,
+        notes: str | None = None,
+    ) -> None:
+        """Cria ou substitui a meta de uma métrica.
+
+        Args:
+            athlete_id: UUID do atleta.
+            metric: uma das chaves de `GOAL_METRICS`.
+            target: valor alvo, na unidade da métrica.
+            target_date: prazo, se houver.
+            notes: contexto livre.
+
+        Raises:
+            ValueError: se a métrica não é conhecida.
+        """
+        if metric not in GOAL_METRICS:
+            raise ValueError(
+                f"Métrica de meta desconhecida: {metric}. "
+                f"Use uma de: {', '.join(sorted(GOAL_METRICS))}"
+            )
+        self._conn.execute(
+            """
+            INSERT INTO athlete_goals (id, athlete_id, metric, target, target_date, notes)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (athlete_id, metric) DO UPDATE SET
+                target = EXCLUDED.target,
+                target_date = EXCLUDED.target_date,
+                notes = EXCLUDED.notes
+            """,
+            [_new_id(), athlete_id, metric, target, target_date, notes],
+        )
+
+    def get_goals(self, athlete_id: str) -> list[dict[str, Any]]:
+        """Devolve as metas cadastradas do atleta."""
+        return rows(
+            self._conn,
+            """
+            SELECT metric, target, target_date, notes FROM athlete_goals
+            WHERE athlete_id = ? ORDER BY metric
+            """,
+            [athlete_id],
+        )
+
+    def delete_goal(self, athlete_id: str, metric: str) -> None:
+        """Remove a meta de uma métrica."""
+        self._conn.execute(
+            "DELETE FROM athlete_goals WHERE athlete_id = ? AND metric = ?",
+            [athlete_id, metric],
+        )
+
+    def add_milestone(
+        self,
+        athlete_id: str,
+        record_date: date,
+        kind: str,
+        title: str,
+        summary: str | None = None,
+        measurements: dict[str, float] | None = None,
+        source: str | None = None,
+    ) -> str:
+        """Registra um marco — exame, início de plano, prova ou achado.
+
+        Args:
+            athlete_id: UUID do atleta.
+            record_date: data do marco.
+            kind: um de `MILESTONE_KINDS`.
+            title: título curto.
+            summary: conclusão em texto livre.
+            measurements: valores medidos, por nome.
+            source: de onde veio a informação (laboratório, dossiê...).
+
+        Returns:
+            UUID do marco criado.
+
+        Raises:
+            ValueError: se o tipo não é conhecido.
+        """
+        if kind not in MILESTONE_KINDS:
+            raise ValueError(
+                f"Tipo de marco desconhecido: {kind}. "
+                f"Use um de: {', '.join(MILESTONE_KINDS)}"
+            )
+        milestone_id = _new_id()
+        self._conn.execute(
+            """
+            INSERT INTO milestones (
+                id, athlete_id, date, kind, title, summary, measurements, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                milestone_id, athlete_id, record_date, kind, title, summary,
+                json.dumps(measurements) if measurements else None, source,
+            ],
+        )
+        return milestone_id
+
+    def get_milestones(
+        self,
+        athlete_id: str,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list[dict[str, Any]]:
+        """Devolve os marcos do período, do mais antigo ao mais recente."""
+        found = rows(
+            self._conn,
+            """
+            SELECT id, date, kind, title, summary, measurements, source
+            FROM milestones
+            WHERE athlete_id = ?
+              AND (? IS NULL OR date >= ?)
+              AND (? IS NULL OR date <= ?)
+            ORDER BY date
+            """,
+            [athlete_id, start, start, end, end],
+        )
+        for milestone in found:
+            milestone["id"] = str(milestone["id"])
+            raw = milestone["measurements"]
+            milestone["measurements"] = json.loads(raw) if raw else {}
+        return found
+
+    def delete_milestone(self, milestone_id: str) -> None:
+        """Remove um marco."""
+        self._conn.execute("DELETE FROM milestones WHERE id = ?", [milestone_id])
 
     # ------------------------------------------------------------------
     # Feedback subjetivo

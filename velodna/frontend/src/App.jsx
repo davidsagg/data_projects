@@ -6,7 +6,7 @@
  * diferentes, sem que a ordem dissesse isso — o usuário tinha de resolver a
  * hierarquia na cabeça. Agora são dois grupos:
  *
- *   estado    Hoje → Semana → Fitness      (agora, sete dias, meses)
+ *   estado    Resumo → Panorama → Fitness  (semana, ciclo de 13 semanas, meses)
  *   detalhe   Atividade · Segmentos · Plano · Coach
  *
  * A Semana é a tela de entrada: é onde mora a pergunta central do produto.
@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react"
 
 import SummaryView from "./views/SummaryView"
+import PanoramaView from "./views/PanoramaView"
 import FitnessView from "./views/FitnessView"
 import ActivityView from "./views/ActivityView"
 import PlanningView from "./views/PlanningView"
@@ -24,6 +25,7 @@ import "./styles/tokens.css"
 
 const STATE_VIEWS = [
   { id: "summary", label: "Resumo" },
+  { id: "panorama", label: "Panorama" },
   { id: "fitness", label: "Fitness" },
 ]
 
@@ -86,6 +88,8 @@ export default function App() {
         >
           <strong
             style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 800,
               fontSize: "var(--fs-lead)",
               letterSpacing: "-0.01em",
               cursor: "pointer",
@@ -157,6 +161,7 @@ export default function App() {
             onOpenActivity={openActivity}
           />
         )}
+        {view === "panorama" && <PanoramaView onOpenActivity={openActivity} />}
         {view === "fitness" && <FitnessView athleteWeightKg={zones?.weight_kg} />}
         {view === "activity" && <ActivityView initialActivity={focusedActivity} />}
         {view === "planning" && <PlanningView />}

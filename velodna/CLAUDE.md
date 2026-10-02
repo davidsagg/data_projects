@@ -2,7 +2,23 @@
 
 Plataforma local de performance ciclística. Privacidade-first: dados de saúde e treino nunca saem do dispositivo.
 
-**Versão atual:** v2.3.0 · **Testes:** 428 passando
+**Versão atual:** v2.4.0 · **Testes:** 475 passando
+
+> **v2.4.0 (2026-10-01)** — aba **Panorama** (ciclo de 13/26/52 semanas contra as
+> metas), inspirada em `docs/design-refs/health_tracker.html`: peso, FTP e W/kg
+> (inclusive projetado no peso alvo), volume por modalidade (rua / rolo / força /
+> outros) contra a meta semanal, maior esforço frente ao treino típico, CTL com
+> marcos, zonas do ciclo, atividades com nome e notas. Metas (`athlete_goals`) e
+> marcos (`milestones`: exame, plano, prova, achado) entram por formulário, pela
+> API ou pelos scripts. Visual novo: fundo frio no lugar do creme, cards com
+> sombra, Manrope/Public Sans/IBM Plex Mono servidas localmente (`@fontsource`),
+> botão "Ver como tabela" nos gráficos.
+>
+> **Dois bugs corrigidos no caminho.** (1) `format.js` lia datas `AAAA-MM-DD` como
+> meia-noite UTC — em Brasília, toda data aparecia um dia antes (a semana de 28/09
+> mostrava "27 set"). Agora `toDate()` trata data pura como meia-noite local.
+> (2) `weekly._aggregate_zones` somava potência de corrida nas zonas de ciclismo;
+> agora filtra por `POWER_SPORTS`.
 
 > **v2.3.0 (2026-09-25)** — quatro análises do workflow do post da augo: subidas
 > com VAM, execução por quartos, densidade carga interna × externa e perfil de
@@ -52,7 +68,7 @@ A conta do Strava tem histórico desde 2012: um `--all` sem o piso reinjeta 1.36
 atividades que foram descartadas de propósito. Use `--ignore-scope` só se a intenção
 for mesmo trazer tudo.
 
-**Perfil do atleta:** FTP 217 W · FC máx 186 · FC repouso 58 · 71 kg. Cadastrado via
+**Perfil do atleta:** FTP 217 W · FC máx 186 · FC repouso 58 · 73 kg (out/2026). Cadastrado via
 `scripts/set_athlete_profile.py`. A FC de limiar (~152 bpm) é calibrada dos dados, não
 informada — ver a etapa `calibrate` do recompute.
 
@@ -95,6 +111,15 @@ nos endpoints). Misturar as duas inflava o eFTP em até 25%.
 # Registrar um teste de potência crítica (protocolo 1 min + 12 min)
 .venv/bin/python scripts/set_athlete_profile.py --cp-test 2026-01-31
 
+# Metas (repetível): metrica=valor[@prazo]; valor vazio remove
+# métricas: weight_kg, weekly_hours, ftp_w, w_per_kg, ctl
+.venv/bin/python scripts/set_athlete_profile.py --goal weight_kg=68 --goal weekly_hours=10
+
+# Marcos: exames, planos, provas, achados (testes de CP entram sozinhos)
+.venv/bin/python scripts/add_milestone.py --date 2026-02-12 --kind exame \
+    --title "Ergoespirometria" --measure vo2max_ml_kg_min=47.5 --summary "..."
+.venv/bin/python scripts/add_milestone.py --list
+
 # Sincronizar saúde do Garmin — incremental e retomável
 .venv/bin/python scripts/sync_garmin_health.py --days 30
 .venv/bin/python scripts/sync_garmin_health.py --start 2023-06-24 --end 2026-06-25
@@ -122,6 +147,23 @@ cópia — duplicar envenenaria o PMC, contando o TSS de cada dia em dobro. Rate
 100 requisições / 15 min e 1.000 / dia; ao receber 429 o cliente dorme até a virada
 da janela. Depois de sincronizar, rode `recompute_metrics.py`.
 
+**Nome e modalidade vêm do Strava.** O sync grava `name`, `strava_sport_type` e
+`trainer` em toda atividade que passa por ele — inclusive nas já sincronizadas —,
+então reanotar o acervo é `sync_strava.py --start 2023-01-01 --no-streams`. A
+modalidade (rua / rolo / força / outros) sai de `analytics.modality.classify`:
+o `.fit` diz `cycling` para rua e rolo, e as duas coisas não são o mesmo treino.
+
+**Peso do Garmin vem das pesagens, não de `get_stats`.** O campo `weight` que o
+builder diário procurava nunca vem preenchido; o peso mora em
+`get_body_composition` (balança ou lançamento manual no app). O sync busca as
+pesagens de `--weight-days` (365) numa requisição só, a cada execução. O Panorama
+usa a pesagem dos últimos 30 dias; sem ela, o cadastro do atleta.
+
+**Exames ficam em `docs/dados-saude/`, fora do git** (o monorepo é público). Os
+valores entram no banco como marco (`add_milestone.py`) — e só lá: nem os
+números do laudo vão para arquivo versionado. A ergoespirometria + lactato de
+fev/2026 já está registrada.
+
 **Garmin:** o backfill longo leva ~1 s por dia e o Garmin bloqueia por IP (429).
 A sessão é persistida em `~/.garminconnect` para evitar relogar. O script só busca
 dias ausentes, então pode rodar em lotes.
@@ -145,9 +187,10 @@ make mcp          # servidor em stdio
 ```
 
 Já configurado em `.mcp.json`, então o Claude Code no diretório do projeto o
-carrega sozinho. 14 ferramentas: perfil do atleta, semana, série de semanas,
+carrega sozinho. 17 ferramentas: perfil do atleta, semana, série de semanas,
 atividades, análise completa de atividade, W'bal, carga, curva de potência,
-histórico de FTP, eficiência, saúde, feedback subjetivo, insights e segmentos.
+histórico de FTP, eficiência, saúde, feedback subjetivo, insights, segmentos,
+panorama do ciclo, metas e marcos.
 
 **Fala HTTP com a API, nunca com o DuckDB.** Não é preferência de estilo: o banco
 aceita um escritor só, e com a API de pé nem `duckdb.connect(read_only=True)`
@@ -200,6 +243,8 @@ src/
                       intervals (detecção de blocos), durability (fadiga-resistência),
                       climbs (detecção + VAM), pacing_analysis (quartos + densidade),
                       capacity (forças e limitadores),
+                      modality (rua/rolo/força/outros), goals (progresso e
+                      sentido de cada meta), panorama (ciclo de N semanas),
                       weekly (semana executada + polarização),
                       PMCCalculator, PowerCurveEngine, WPrimeModel (Skiba),
                       VeloDNATracker (MLflow)
@@ -226,8 +271,12 @@ frontend/                        ← reescrito na v2.0.0; os componentes antigos
     components/planning/         ← CalendarGrid, ProjectionPanel
     components/training/         ← IntensityBar, WeekLoadChart, WBalChart/WBalPanel,
                                    IntervalPanel, DurabilityPanel
-    views/                       ← TodayView, WeekView, FitnessView, ActivityView,
-                                   PlanningView, SegmentsView, CoachView
+    components/panorama/         ← VolumeChart, CtlChart, MilestoneCards, CycleSettings
+    components/viz/GoalPill.jsx  ← etiqueta de meta/estado (ícone + texto + fundo)
+    components/viz/milestoneLines.jsx ← marcos como linhas verticais nos gráficos
+    lib/goals.js                 ← texto de meta e tokens de modalidade
+    views/                       ← SummaryView, PanoramaView, FitnessView,
+                                   ActivityView, PlanningView, SegmentsView, CoachView
 
 Sete visões, todas ligadas ao backend real.
 tests/
@@ -281,6 +330,13 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/activities/{id}/pacing` | Distribuição de intensidade por quarto do esforço |
 | GET | `/activities/{id}/load-density` | Densidade potência × FC |
 | GET | `/capacity-profile` | Forças e limitadores por duração |
+| GET | `/panorama` | Ciclo de N semanas (`weeks`, `zones`): atleta, metas, volume, zonas, marcos |
+| GET | `/goals` | Metas com valor atual, quanto falta e estado |
+| PUT | `/goals` | Cria/substitui a meta de uma métrica |
+| DELETE | `/goals/{metric}` | Remove uma meta |
+| GET | `/milestones` | Marcos (exame, plano, prova, achado) |
+| POST | `/milestones` | Registra um marco |
+| DELETE | `/milestones/{id}` | Remove um marco |
 | GET | `/feedback` | Feedback subjetivo do período |
 | GET | `/activities/{id}/feedback` | Feedback de uma atividade |
 | PUT | `/feedback` | Grava/atualiza feedback (idempotente por atleta+data+atividade) |
@@ -328,6 +384,12 @@ DDL completo em `src/storage/catalog_store.py` (`_DDL`). Chaves são UUID.
 - `activity_feedback` — RPE (Borg 1–10), sensação (1–5), notas. `activity_id`
   **opcional**: nulo é a nota do dia, que é como um dia de descanso entra no
   registro e explica o treino seguinte
+- `athlete_goals` — uma meta por métrica (`weight_kg`, `weekly_hours`, `ftp_w`,
+  `w_per_kg`, `ctl`). O sentido ("menor é melhor" no peso) mora em `analytics.goals`
+- `milestones` — exames, planos, provas e achados, com `measurements` em JSON.
+  Os testes de CP **não** vão aqui: o panorama os lê de `ftp_history`
+- `activities.name` / `strava_sport_type` / `trainer` — metadados do Strava
+  (colunas acrescentadas por `ALTER TABLE ... IF NOT EXISTS` no DDL)
 - `ai_conversations` + `ai_insights` — histórico do AI Coach
 
 **Um atleta por instalação:** `CatalogStore.resolve_athlete_id()` é o único ponto que
@@ -448,7 +510,10 @@ faz a ponte entre a plataforma single-user e o schema multi-atleta.
   compartilhada
 - **Cores dos gráficos vêm dos tokens CSS**, lidos via `useCssVar`. A paleta foi validada como
   conjunto (separação para daltonismo, faixa de luminosidade, contraste) nos dois temas — não
-  trocar um hex isolado
+  trocar um hex isolado. As modalidades (`--mod-*`) foram validadas à parte; o verde e o
+  laranja do claro foram escurecidos até 3:1 sobre o branco
+- **Datas puras da API (`AAAA-MM-DD`) passam por `format.toDate`.** `new Date("2026-07-06")`
+  é meia-noite UTC e, em Brasília, vira o dia anterior
 - **O feedback subjetivo é a única fonte não medida do acervo.** Tudo o mais vem
   de sensor. É ele que explica o treino fraco com HRV normal e sono bom — sem
   ele, o outlier fica sem causa. `upsert_feedback` preserva campos omitidos: quem

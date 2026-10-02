@@ -29,7 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from analytics.ftp_history import ftp_on
+from analytics.ftp_history import POWER_SPORTS, ftp_on
+from analytics.modality import classify
 from analytics.timeseries import load_series
 from analytics.zones import build_power_zones, time_in_zones
 from storage.query import rows
@@ -191,23 +192,7 @@ class WeekSummary:
         Returns:
             `polarizado`, `piramidal`, `limiar`, `base` ou `sem dados`.
         """
-        if not self.easy or not self.easy.seconds and not self.hard:
-            return "sem dados"
-
-        easy = self.easy.pct if self.easy else 0.0
-        threshold = self.threshold.pct if self.threshold else 0.0
-        hard = self.hard.pct if self.hard else 0.0
-
-        if easy + threshold + hard == 0:
-            return "sem dados"
-
-        if threshold >= THRESHOLD_HEAVY_PCT:
-            return "limiar"
-        if easy >= POLARIZED_EASY_MIN_PCT and hard >= POLARIZED_HARD_MIN_PCT:
-            return "polarizado" if hard >= threshold else "piramidal"
-        if hard < 1.0 and threshold < 10.0:
-            return "base"
-        return "piramidal"
+        return classify_distribution(self.easy, self.threshold, self.hard)
 
     @property
     def avg_sleep_hours(self) -> float | None:
@@ -251,6 +236,37 @@ class WeekSummary:
             "avg_sleep_hours": self.avg_sleep_hours,
             "avg_hrv_ms": self.avg_hrv_ms,
         }
+
+
+def classify_distribution(
+    easy: ZoneBucket | None,
+    threshold: ZoneBucket | None,
+    hard: ZoneBucket | None,
+) -> str:
+    """Classifica um padrão de intensidade no modelo de três zonas.
+
+    Vale para qualquer janela — a semana do Resumo ou as 13 do Panorama.
+
+    Returns:
+        `polarizado`, `piramidal`, `limiar`, `base` ou `sem dados`.
+    """
+    if not easy or not easy.seconds and not hard:
+        return "sem dados"
+
+    easy_pct = easy.pct if easy else 0.0
+    threshold_pct = threshold.pct if threshold else 0.0
+    hard_pct = hard.pct if hard else 0.0
+
+    if easy_pct + threshold_pct + hard_pct == 0:
+        return "sem dados"
+
+    if threshold_pct >= THRESHOLD_HEAVY_PCT:
+        return "limiar"
+    if easy_pct >= POLARIZED_EASY_MIN_PCT and hard_pct >= POLARIZED_HARD_MIN_PCT:
+        return "polarizado" if hard_pct >= threshold_pct else "piramidal"
+    if hard_pct < 1.0 and threshold_pct < 10.0:
+        return "base"
+    return "piramidal"
 
 
 def week_bounds(reference: date) -> tuple[date, date]:
@@ -483,6 +499,7 @@ def _activities_between(conn, athlete_id: str, start: date, end: date) -> list[d
         conn,
         """
         SELECT a.id, CAST(a.started_at AS DATE) AS date, a.started_at, a.sport_type,
+               a.name, a.strava_sport_type, a.trainer,
                a.elapsed_time_s, a.moving_time_s, a.distance_m, a.elevation_gain_m,
                a.tss, a.tss_source, a.normalized_power_w, a.intensity_factor,
                a.avg_power_w, a.max_power_w, a.avg_hr_bpm, a.max_hr_bpm,
@@ -506,6 +523,9 @@ def _activities_between(conn, athlete_id: str, start: date, end: date) -> list[d
     # Compliance é o percentual do TSS planejado que o treino de fato cumpriu.
     # Sem plano ligado, não há o que comparar — e 100% seria mentira.
     for activity in records:
+        activity["modality"] = classify(
+            activity["sport_type"], activity["strava_sport_type"], activity["trainer"]
+        )
         planned = activity.get("planned_tss")
         done = activity.get("tss")
         activity["compliance_pct"] = (
@@ -565,10 +585,16 @@ def _aggregate_zones(store, athlete_id: str, activities: list[dict]) -> dict[str
 
     Cada atividade é classificada contra o FTP vigente na **sua** data: agregar
     tudo contra o FTP de hoje deslocaria as sessões antigas de zona.
+
+    Só entram esportes de bike: a potência de corrida tem outra escala (266 W
+    correndo contra 219 W pedalando no mesmo esforço) e, contra o FTP do
+    ciclismo, jogaria um trote leve em Z5.
     """
     totals: dict[str, int] = {}
 
     for activity in activities:
+        if activity.get("sport_type") not in POWER_SPORTS:
+            continue
         ftp = ftp_on(store, athlete_id, activity["date"])
         if not ftp:
             continue

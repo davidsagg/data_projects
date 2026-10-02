@@ -10,7 +10,7 @@
  * altura para mostrar a mesma proporção, e a proporção lê-se melhor lado a lado
  * que em barras separadas com escalas próprias.
  */
-import { num } from "../../lib/format"
+import { duration, num } from "../../lib/format"
 
 /* Cores da convenção Coggan/TrainingPeaks — as mesmas que o atleta lê no
    relatório semanal dele. O rótulo e o percentual acompanham cada faixa, então
@@ -28,20 +28,38 @@ const ZONES = [
 /** Abaixo disso o segmento some na barra; o valor fica só na legenda. */
 const MIN_VISIBLE_PCT = 2.5
 
-export default function ZoneBar({ zoneSeconds, intensity, distribution }) {
+/** Faixa em watts de uma zona, a partir das definições vigentes. */
+function wattRange(definition) {
+  if (!definition) return null
+  if (definition.high == null) return `> ${num(definition.low)} W`
+  return `${num(definition.low)}–${num(definition.high)} W`
+}
+
+/**
+ * @param definitions faixas em watts vindas da API (opcional) — quando vêm,
+ *   a legenda mostra watts ao lado do %FTP e o tempo absoluto em cada zona.
+ */
+export default function ZoneBar({
+  zoneSeconds,
+  intensity,
+  distribution,
+  definitions,
+  emptyText = "Sem dados de potência nesta semana.",
+}) {
   const total = Object.values(zoneSeconds || {}).reduce((a, b) => a + b, 0)
 
   if (!total) {
     return (
       <p className="muted" style={{ margin: 0 }}>
-        Sem dados de potência nesta semana.
+        {emptyText}
       </p>
     )
   }
 
   const rows = ZONES.map((zone) => {
     const seconds = zoneSeconds[zone.key] || 0
-    return { ...zone, seconds, pct: (seconds / total) * 100 }
+    const definition = definitions?.find((d) => d.zone === zone.key)
+    return { ...zone, seconds, pct: (seconds / total) * 100, watts: wattRange(definition) }
   })
 
   return (
@@ -118,6 +136,8 @@ export default function ZoneBar({ zoneSeconds, intensity, distribution }) {
               }}
             >
               {zone.range}
+              {zone.watts && ` · ${zone.watts}`}
+              {definitions && ` · ${duration(zone.seconds)}`}
             </span>
           </div>
         ))}
@@ -127,7 +147,8 @@ export default function ZoneBar({ zoneSeconds, intensity, distribution }) {
         <div
           style={{
             display: "flex",
-            gap: "var(--space-8)",
+            flexWrap: "wrap",
+            gap: "var(--space-2) var(--space-8)",
             paddingTop: "var(--space-4)",
             borderTop: "1px solid var(--border-subtle)",
             fontSize: "var(--fs-small)",

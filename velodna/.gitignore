@@ -22,3 +22,9 @@ mlruns/
 # Servem de referência local para o desenho da interface, não de artefato do
 # projeto.
 docs/design-refs/
+
+# Exames e laudos médicos (ergoespirometria, lactato, ECG). NÃO versionar: o
+# monorepo é público e estes PDFs têm nome, data de nascimento, pressão arterial
+# e traçado de ECG. Os valores que importam ao app entram no banco local como
+# marco (`scripts/add_milestone.py`), não no repositório.
+docs/dados-saude/

@@ -114,3 +114,46 @@ def test_malformed_payload_does_not_raise():
         stats={"restingHeartRate": None},
     )
     assert daily.is_empty
+
+
+# ---------------------------------------------------------------------------
+# Pesagens (composição corporal)
+# ---------------------------------------------------------------------------
+
+
+def test_weigh_ins_parsed_from_body_composition():
+    from datetime import date
+
+    from ingestion.garmin_health_client import parse_weigh_ins
+
+    payload = {
+        "dateWeightList": [
+            {"calendarDate": "2026-01-28", "weight": 73400.0, "date": 2},
+            {"calendarDate": "2026-01-24", "weight": 73000.0, "date": 1},
+        ]
+    }
+    assert parse_weigh_ins(payload) == {
+        date(2026, 1, 28): 73.4,
+        date(2026, 1, 24): 73.0,
+    }
+
+
+def test_latest_weigh_in_of_the_day_wins():
+    from datetime import date
+
+    from ingestion.garmin_health_client import parse_weigh_ins
+
+    payload = {
+        "dateWeightList": [
+            {"calendarDate": "2026-09-30", "weight": 73500.0, "date": 200},
+            {"calendarDate": "2026-09-30", "weight": 72900.0, "date": 100},
+        ]
+    }
+    assert parse_weigh_ins(payload) == {date(2026, 9, 30): 73.5}
+
+
+def test_weigh_ins_tolerate_empty_payload():
+    from ingestion.garmin_health_client import parse_weigh_ins
+
+    assert parse_weigh_ins({}) == {}
+    assert parse_weigh_ins({"dateWeightList": None}) == {}

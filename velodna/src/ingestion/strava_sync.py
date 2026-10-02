@@ -255,7 +255,11 @@ class StravaSync:
         """Processa uma atividade: já existe, casa com uma local, ou é nova."""
         strava_id = int(summary["id"])
 
-        if self._store.find_activity_by_strava_id(strava_id):
+        existing = self._store.find_activity_by_strava_id(strava_id)
+        if existing:
+            # Já sincronizada — mas o nome e a modalidade podem ter chegado depois
+            # (ou o atleta renomeou o treino). Anotar é barato e idempotente.
+            self._annotate(existing, summary)
             report.skipped += 1
             return
 
@@ -269,15 +273,27 @@ class StravaSync:
         )
         if twin:
             self._store.attach_strava_id(twin, strava_id)
+            self._annotate(twin, summary)
             report.linked += 1
             if with_streams and self._store.count_streams(twin) == 0:
                 report.streams_added += self._fetch_streams(twin, strava_id)
             return
 
         activity_id = self._store.upsert_activity(activity, athlete_id)
+        self._annotate(activity_id, summary)
         report.inserted += 1
         if with_streams:
             report.streams_added += self._fetch_streams(activity_id, strava_id)
+
+    def _annotate(self, activity_id: str, summary: dict) -> None:
+        """Grava os metadados que só o Strava tem: nome, tipo e rolo."""
+        trainer = summary.get("trainer")
+        self._store.annotate_strava_meta(
+            activity_id,
+            name=summary.get("name"),
+            strava_sport_type=summary.get("sport_type") or summary.get("type"),
+            trainer=bool(trainer) if trainer is not None else None,
+        )
 
     def _fetch_streams(self, activity_id: str, strava_id: int) -> int:
         """Busca e persiste os streams de uma atividade. Devolve 1 se gravou."""

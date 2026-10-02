@@ -280,3 +280,46 @@ def test_broken_activity_does_not_abort_batch(store: CatalogStore):
     assert report.inserted == 2
     assert len(report.errors) == 1
     assert "atividade 2" in report.errors[0]
+
+
+# ---------------------------------------------------------------------------
+# Metadados: nome, tipo e rolo
+# ---------------------------------------------------------------------------
+
+
+def _meta(store: CatalogStore, strava_id: int) -> tuple:
+    return store.conn.execute(
+        "SELECT name, strava_sport_type, trainer FROM activities WHERE strava_id = ?",
+        [strava_id],
+    ).fetchone()
+
+
+def test_new_activity_gets_name_and_type(store: CatalogStore):
+    start = datetime(2026, 9, 27, 8, tzinfo=timezone.utc)
+    client = FakeStravaClient(
+        [summary(10, start, name="L'etape Campos", sport_type="Ride", trainer=False)]
+    )
+    StravaSync(client, store).sync(with_streams=False)
+    assert _meta(store, 10) == ("L'etape Campos", "Ride", False)
+
+
+def test_already_synced_activity_is_annotated(store: CatalogStore):
+    """O backfill de metadados roda pelo mesmo sync, sobre o que já existe."""
+    start = datetime(2026, 9, 24, 7, tzinfo=timezone.utc)
+    StravaSync(FakeStravaClient([summary(11, start)]), store).sync(with_streams=False)
+    assert _meta(store, 11)[0] is None or _meta(store, 11)[1] == "Ride"
+
+    renamed = summary(11, start, name="Ativação pré-prova", sport_type="VirtualRide")
+    report = StravaSync(FakeStravaClient([renamed]), store).sync(with_streams=False)
+
+    assert report.skipped == 1
+    assert _meta(store, 11)[:2] == ("Ativação pré-prova", "VirtualRide")
+
+
+def test_missing_trainer_flag_does_not_erase_previous(store: CatalogStore):
+    start = datetime(2026, 9, 22, 7, tzinfo=timezone.utc)
+    StravaSync(
+        FakeStravaClient([summary(12, start, trainer=True)]), store
+    ).sync(with_streams=False)
+    StravaSync(FakeStravaClient([summary(12, start)]), store).sync(with_streams=False)
+    assert _meta(store, 12)[2] is True

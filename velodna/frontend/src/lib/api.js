@@ -170,4 +170,19 @@ export const api = {
       send("post", "/planning/workouts", body),
     reconcile: () => send("post", "/planning/reconcile"),
   },
+
+  panorama: (params) => get("/panorama", { params, fallback: null }),
+
+  goals: {
+    list: () => get("/goals", { fallback: [] }),
+    metrics: () => get("/goals/metrics", { fallback: [] }),
+    save: (body) => send("put", "/goals", body),
+    remove: (metric) => send("delete", `/goals/${metric}`),
+  },
+
+  milestones: {
+    list: (params) => get("/milestones", { params, fallback: [] }),
+    create: (body) => send("post", "/milestones", body),
+    remove: (id) => send("delete", `/milestones/${id}`),
+  },
 }

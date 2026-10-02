@@ -18,7 +18,7 @@ export default function StatTile({
 
   return (
     <div className="card" style={{ display: "grid", gap: "var(--space-1)" }}>
-      <span className="card-title">{label}</span>
+      <span className="label">{label}</span>
       <div className={hero ? "figure figure-hero" : "figure"}>
         {value}
         {unit && <span className="unit">{unit}</span>}

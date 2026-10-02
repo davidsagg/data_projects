@@ -12,6 +12,7 @@ from api.routers import (
     export_router,
     fitness_router,
     health_router,
+    panorama_router,
     planning_router,
     routes_router,
     segments_router,
@@ -28,6 +29,7 @@ app.include_router(health_router.router, tags=["health"])
 app.include_router(routes_router.router, prefix="/routes", tags=["routes"])
 app.include_router(segments_router.router, tags=["segments"])
 app.include_router(training_router.router, tags=["training"])
+app.include_router(panorama_router.router, tags=["panorama"])
 app.include_router(export_router.router, tags=["export"])
 app.include_router(coach_router.router, prefix="/coach", tags=["coach"])
 

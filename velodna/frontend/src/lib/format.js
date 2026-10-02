@@ -48,10 +48,26 @@ export function watts(value) {
   return value === null || value === undefined ? "—" : `${num(value)}${NBSP}W`
 }
 
+/**
+ * Converte o valor em Date sem deslocar o dia.
+ *
+ * `new Date("2026-07-06")` é meia-noite **UTC** — em Brasília, 21h do dia 5. A
+ * API devolve datas puras nesse formato, e formatá-las direto mostrava toda
+ * data um dia antes. Data pura vira meia-noite local; timestamp passa direto.
+ */
+export function toDate(value) {
+  if (value instanceof Date) return value
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number)
+    return new Date(year, month - 1, day)
+  }
+  return new Date(value)
+}
+
 /** Data curta: `25 jul`. Aceita string ISO ou Date. */
 export function shortDate(value) {
   if (!value) return "—"
-  return new Date(value).toLocaleDateString("pt-BR", {
+  return toDate(value).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
   })
@@ -60,7 +76,7 @@ export function shortDate(value) {
 /** Data com ano: `25 jul 2026`. */
 export function fullDate(value) {
   if (!value) return "—"
-  return new Date(value).toLocaleDateString("pt-BR", {
+  return toDate(value).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -70,7 +86,7 @@ export function fullDate(value) {
 /** Data para eixos longos: mês e ano abreviados. */
 export function monthYear(value) {
   if (!value) return ""
-  return new Date(value).toLocaleDateString("pt-BR", {
+  return toDate(value).toLocaleDateString("pt-BR", {
     month: "short",
     year: "2-digit",
   })
@@ -79,7 +95,7 @@ export function monthYear(value) {
 /** Data para eixos curtos: dia e mês. */
 export function dayMonth(value) {
   if (!value) return ""
-  return new Date(value).toLocaleDateString("pt-BR", {
+  return toDate(value).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
   })

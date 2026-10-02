@@ -35,10 +35,14 @@ export default function FitnessView({ athleteWeightKg }) {
       api.fitness.efficiency(),
       api.fitness.zones(),
       api.health.daily(400),
+      api.goals.list(),
+      api.milestones.list(),
     ])
-      .then(([pmc, curve, cp, ftpHistory, efficiency, zones, health]) => {
+      .then(([pmc, curve, cp, ftpHistory, efficiency, zones, health, goals, milestones]) => {
         if (cancelled) return
-        setState({ loading: false, pmc, curve, cp, ftpHistory, efficiency, zones, health })
+        setState({
+          loading: false, pmc, curve, cp, ftpHistory, efficiency, zones, health, goals, milestones,
+        })
       })
       .catch((error) => {
         if (!cancelled) setState({ loading: false, error })
@@ -58,6 +62,7 @@ export default function FitnessView({ athleteWeightKg }) {
   const ftp = state.zones?.ftp_w
 
   const rampRate = computeRampRate(state.pmc)
+  const goalWeight = state.goals?.find((g) => g.metric === "weight_kg")?.target
 
   return (
     <div className="page">
@@ -89,12 +94,17 @@ export default function FitnessView({ athleteWeightKg }) {
             label="Relação peso-potência"
             value={num(ftp / athleteWeightKg, 2)}
             unit="W/kg"
+            context={
+              goalWeight
+                ? `${num(ftp / goalWeight, 2)} W/kg no peso alvo de ${num(goalWeight, 0)} kg`
+                : null
+            }
             hero
           />
         )}
       </div>
 
-      <FitnessChart pmc={state.pmc} health={state.health} />
+      <FitnessChart pmc={state.pmc} health={state.health} milestones={state.milestones} />
 
       <div
         style={{
@@ -108,7 +118,7 @@ export default function FitnessView({ athleteWeightKg }) {
           cp={state.cp}
           weightKg={athleteWeightKg}
         />
-        <FTPHistoryChart history={state.ftpHistory} />
+        <FTPHistoryChart history={state.ftpHistory} milestones={state.milestones} />
       </div>
 
       <CapacityProfile />

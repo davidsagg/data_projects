@@ -138,6 +138,26 @@ class GarminHealthClient:
                 time.sleep(delay_s)
         return results
 
+    def get_weigh_ins(self, start: date, end: date) -> dict[date, float]:
+        """Pesagens registradas no intervalo, em kg, uma por dia.
+
+        O peso **não** vem em `get_stats` — o campo que o builder diário procura
+        nunca chega preenchido. Ele mora na composição corporal: cada pesagem
+        (balança conectada ou lançamento manual no app) é uma entrada de
+        `dateWeightList`. Uma requisição cobre o intervalo inteiro.
+
+        Args:
+            start: primeiro dia, inclusive.
+            end: último dia, inclusive.
+
+        Returns:
+            Dicionário {data: kg}; vazio se a conta não tem pesagens.
+        """
+        payload = self._safe(
+            lambda: self._api.get_body_composition(start.isoformat(), end.isoformat())
+        )
+        return parse_weigh_ins(payload)
+
     # ------------------------------------------------------------------
     # Fetch primitives (patchable em testes)
     # ------------------------------------------------------------------
@@ -222,6 +242,31 @@ class GarminHealthClient:
                 if stats.get("weight") else None
             ),
         )
+
+
+def parse_weigh_ins(payload: dict) -> dict[date, float]:
+    """Extrai as pesagens de um retorno de `get_body_composition`.
+
+    Duas pesagens no mesmo dia: vale a mais recente (maior `date`, em ms) —
+    quem se pesa de manhã e de noite quer o último registro, não a média.
+
+    Args:
+        payload: resposta do Garmin, com `dateWeightList` em gramas.
+
+    Returns:
+        Dicionário {data: kg}.
+    """
+    latest: dict[date, tuple[int, float]] = {}
+    for entry in (payload or {}).get("dateWeightList") or []:
+        grams = entry.get("weight")
+        raw_day = entry.get("calendarDate")
+        if not grams or not raw_day:
+            continue
+        day = date.fromisoformat(raw_day)
+        stamp = entry.get("date") or 0
+        if day not in latest or stamp >= latest[day][0]:
+            latest[day] = (stamp, round(grams / 1000, 2))
+    return {day: kg for day, (_, kg) in latest.items()}
 
 
 def resolve_credentials() -> tuple[str, str] | None:

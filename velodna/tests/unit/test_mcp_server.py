@@ -50,6 +50,9 @@ EXPECTED_TOOLS = {
     "get_subjective_feedback",
     "get_health_insights",
     "get_segments",
+    "get_panorama",
+    "get_goals",
+    "get_milestones",
 }
 
 

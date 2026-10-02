@@ -22,6 +22,7 @@ export default function MetricCard({
   trendToken = "--ctl",
   trendBand,
   hint,
+  badge,
 }) {
   const interactive = Boolean(onClick)
 
@@ -43,7 +44,7 @@ export default function MetricCard({
         cursor: interactive ? "pointer" : "default",
       }}
     >
-      <span className="card-title">{label}</span>
+      <span className="label">{label}</span>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)" }}>
         <span
@@ -68,6 +69,8 @@ export default function MetricCard({
           {context}
         </span>
       )}
+
+      {badge}
 
       {hint && (
         <span

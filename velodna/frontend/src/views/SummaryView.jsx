@@ -29,6 +29,7 @@ import ChartFrame from "../components/viz/ChartFrame"
 import ErrorState from "../components/viz/ErrorState"
 import HeroNumber from "../components/viz/HeroNumber"
 import MetricCard from "../components/viz/MetricCard"
+import GoalPill from "../components/viz/GoalPill"
 import { api } from "../lib/api"
 import { duration, formState, fullDate, num, shortDate } from "../lib/format"
 
@@ -73,10 +74,11 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
       api.training.weeks({ weeks: TREND_WEEKS, reference: referenceFor(offset) }),
       api.health.daily(45),
       api.health.alerts(),
+      api.goals.list(),
     ])
-      .then(([today, week, weeks, health, alerts]) => {
+      .then(([today, week, weeks, health, alerts, goals]) => {
         if (!cancelled)
-          setState({ loading: false, today, week, weeks, health, alerts })
+          setState({ loading: false, today, week, weeks, health, alerts, goals })
       })
       .catch((error) => !cancelled && setState({ loading: false, error }))
 
@@ -97,6 +99,7 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
   const tone = readinessTone(readiness?.score)
   const form = formState(today?.form?.tsb)
   const series = (key) => [...(state.health || [])].reverse().map((h) => h[key])
+  const hoursGoal = state.goals?.find((g) => g.metric === "weekly_hours")
 
   return (
     <>
@@ -106,7 +109,7 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
           <section
             className="section"
             style={{
-              gridTemplateColumns: "minmax(260px, 0.75fr) minmax(0, 1.25fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
               alignItems: "start",
               gap: "var(--space-8)",
             }}
@@ -282,6 +285,7 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
               label="Volume"
               value={duration(week.total_hours * 3600)}
               context={`${num(week.total_km, 0)} km · ${num(week.total_elevation_m, 0)} m`}
+              badge={weekGoalPill(week, hoursGoal, isCurrentWeek)}
               hint="Tempo em movimento, distância e elevação acumulados na semana."
             />
             <MetricCard
@@ -458,6 +462,31 @@ function SummarySkeleton() {
       <div className="skeleton" style={{ height: 340, borderRadius: "var(--radius)" }} />
       <div className="skeleton" style={{ height: 260, borderRadius: "var(--radius)" }} />
     </div>
+  )
+}
+
+/**
+ * Etiqueta da meta de volume para a semana exibida.
+ *
+ * A meta é semanal, então a semana se mede contra ela diretamente — não contra
+ * a média do ciclo, que é o que o Panorama mostra. Semana em curso diz quanto
+ * falta; semana fechada diz o percentual cumprido.
+ */
+function weekGoalPill(week, goal, inProgress) {
+  if (!goal) return null
+  const done = week.total_hours
+  const pct = (done / goal.target) * 100
+  const status = done >= goal.target ? "achieved" : pct >= 90 ? "near" : "far"
+  const text =
+    status === "achieved"
+      ? `meta ${num(goal.target, 0)} h atingida`
+      : inProgress
+        ? `faltam ${num(goal.target - done, 1)} h · meta ${num(goal.target, 0)} h`
+        : `${num(pct, 0)}% da meta · ${num(goal.target, 0)} h`
+  return (
+    <GoalPill goal={{ ...goal, status: inProgress && status === "far" ? "unknown" : status }}>
+      {text}
+    </GoalPill>
   )
 }
 

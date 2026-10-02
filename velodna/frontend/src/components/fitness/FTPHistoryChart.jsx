@@ -20,6 +20,7 @@ import {
 
 import ChartFrame from "../viz/ChartFrame"
 import VizTooltip from "../viz/Tooltip"
+import { milestoneLines } from "../viz/milestoneLines"
 import { useCssVars } from "../../lib/useCssVar"
 import { fullDate, monthYear, num } from "../../lib/format"
 
@@ -29,10 +30,11 @@ const TOKENS = [
   "--gridline",
   "--axis",
   "--text-muted",
+  "--text-tertiary",
   "--surface-1",
 ]
 
-export default function FTPHistoryChart({ history }) {
+export default function FTPHistoryChart({ history, milestones }) {
   const colors = useCssVars(TOKENS)
 
   const { rows, measured } = useMemo(() => {
@@ -40,14 +42,26 @@ export default function FTPHistoryChart({ history }) {
     const sorted = [...history].sort((a, b) =>
       a.effective_from < b.effective_from ? -1 : 1,
     )
+    const points = sorted.map((h) => ({
+      date: h.effective_from,
+      ftp: h.ftp_w,
+      source: h.source,
+      method: h.method,
+      cp_w: h.cp_w,
+    }))
+    // O eixo X é categórico (uma categoria por ponto do histórico); para o marco
+    // ganhar linha, a data dele precisa existir como categoria. Entra com o FTP
+    // vigente naquele dia, então a linha em degrau não muda de forma.
+    const known = new Set(points.map((p) => p.date))
+    for (const m of milestones || []) {
+      if (known.has(m.date) || m.date < points[0].date) continue
+      const vigente = [...points].reverse().find((p) => p.date <= m.date)
+      points.push({ date: m.date, ftp: vigente?.ftp ?? null })
+      known.add(m.date)
+    }
+    points.sort((a, b) => (a.date < b.date ? -1 : 1))
     return {
-      rows: sorted.map((h) => ({
-        date: h.effective_from,
-        ftp: h.ftp_w,
-        source: h.source,
-        method: h.method,
-        cp_w: h.cp_w,
-      })),
+      rows: points,
       measured: sorted
         .filter((h) => h.source === "test" || h.source === "manual")
         .map((h) => ({
@@ -58,7 +72,7 @@ export default function FTPHistoryChart({ history }) {
           cp_w: h.cp_w,
         })),
     }
-  }, [history])
+  }, [history, milestones])
 
   if (!rows.length) {
     return (
@@ -136,6 +150,7 @@ export default function FTPHistoryChart({ history }) {
             shape="circle"
             r={5}
           />
+          {milestoneLines(milestones, null, colors)}
         </ComposedChart>
       </ResponsiveContainer>
 

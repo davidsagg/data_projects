@@ -63,10 +63,40 @@ def persist(store: CatalogStore, athlete_id: str, daily: HealthDaily) -> None:
         body_battery_min=daily.body_battery_min,
         stress_level=daily.stress_avg,
         vo2max_estimated=daily.vo2max_estimated,
-        weight_kg=daily.weight_kg,
         steps=daily.steps,
         source=daily.source,
+        # Peso só entra quando veio: o dia sem pesagem não pode apagar a que o
+        # passo de pesagens gravou (um --overwrite faria exatamente isso).
+        **({"weight_kg": daily.weight_kg} if daily.weight_kg else {}),
     )
+
+
+def sync_weigh_ins(client, athlete_id: str, start: date, end: date) -> int:
+    """Grava as pesagens do intervalo no dia correspondente.
+
+    É um passo à parte do diário porque o peso vem de outro endpoint e cobre o
+    intervalo numa requisição só — por isso roda sempre, mesmo quando não falta
+    nenhum dia de HRV e sono.
+
+    Args:
+        client: GarminHealthClient autenticado.
+        athlete_id: UUID do atleta.
+        start: primeiro dia, inclusive.
+        end: último dia, inclusive.
+
+    Returns:
+        Número de pesagens gravadas.
+    """
+    weigh_ins = client.get_weigh_ins(start, end)
+    if not weigh_ins:
+        return 0
+    with duckdb.connect(DB_PATH) as conn:
+        store = CatalogStore(conn)
+        for day, kg in sorted(weigh_ins.items()):
+            store.insert_health_daily(athlete_id, day, weight_kg=kg)
+    last_day = max(weigh_ins)
+    print(f"Pesagens: {len(weigh_ins)} · última {weigh_ins[last_day]:.1f} kg em {last_day}")
+    return len(weigh_ins)
 
 
 def missing_days(conn, athlete_id: str, start: date, end: date) -> list[date]:
@@ -84,8 +114,12 @@ def missing_days(conn, athlete_id: str, start: date, end: date) -> list[date]:
     existing = {
         row[0]
         for row in conn.execute(
+            # Dia com só a pesagem ainda conta como faltante: HRV e sono dele
+            # não foram buscados.
             "SELECT date FROM health_metrics WHERE athlete_id = ? "
-            "AND date BETWEEN ? AND ?",
+            "AND date BETWEEN ? AND ? AND (hrv_rmssd_ms IS NOT NULL "
+            "OR sleep_hours IS NOT NULL OR resting_hr_bpm IS NOT NULL "
+            "OR body_battery IS NOT NULL OR steps IS NOT NULL)",
             [athlete_id, start, end],
         ).fetchall()
     }
@@ -111,6 +145,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--delay", type=float, default=1.0, help="Pausa entre dias, em segundos"
+    )
+    parser.add_argument(
+        "--weight-days",
+        type=int,
+        default=365,
+        help="Janela de pesagens a buscar (uma requisição só)",
     )
     parser.add_argument(
         "--batch",
@@ -141,13 +181,15 @@ def main() -> int:
             else missing_days(conn, athlete_id, start, end)
         )
 
+    client = GarminHealthClient(*credentials)
+    sync_weigh_ins(client, athlete_id, end - timedelta(days=args.weight_days - 1), end)
+
     if not days:
         print(f"Nada a sincronizar entre {start} e {end}.")
         return 0
 
     print(f"Sincronizando {len(days)} dia(s) entre {days[0]} e {days[-1]}...\n")
 
-    client = GarminHealthClient(*credentials)
     saved = empty = 0
 
     for offset in range(0, len(days), args.batch):

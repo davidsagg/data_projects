@@ -319,6 +319,47 @@ async def get_segments(segment_id: str | None = None) -> Any:
     return await _get("/segments")
 
 
+# ---------------------------------------------------------------------------
+# Ciclo, metas e marcos
+# ---------------------------------------------------------------------------
+
+
+@server.tool(
+    description=(
+        "Panorama das últimas N semanas (padrão 13, um bloco de preparação): "
+        "FTP, peso e W/kg — inclusive projetado no peso alvo —, progresso de "
+        "cada meta, volume semanal por modalidade (rua, rolo, força, outros), "
+        "maior esforço frente ao treino típico, CTL diário, tempo em zona e "
+        "marcos. Comece por aqui para perguntas sobre o ciclo ou as metas."
+    )
+)
+async def get_panorama(weeks: int = 13, include_zones: bool = False) -> dict:
+    return await _get("/panorama", {"weeks": weeks, "zones": include_zones})
+
+
+@server.tool(
+    description=(
+        "Metas do atleta (peso, horas por semana, FTP, W/kg, CTL), cada uma com "
+        "o valor atual, quanto falta e o estado: achieved, near, far ou unknown. "
+        "No peso, menor é melhor."
+    )
+)
+async def get_goals() -> list:
+    return await _get("/goals")
+
+
+@server.tool(
+    description=(
+        "Marcos que não vêm de sensor: exames de laboratório (ergoespirometria, "
+        "lactato) com os valores medidos, início de planos, provas e achados. "
+        "Explicam mudanças que os dados de treino sozinhos não explicam — por "
+        "exemplo, um VO2max em queda com FTP estável."
+    )
+)
+async def get_milestones(start: str | None = None, end: str | None = None) -> list:
+    return await _get("/milestones", {"start": start, "end": end})
+
+
 def main() -> None:
     """Sobe o servidor em stdio."""
     server.run(transport="stdio")

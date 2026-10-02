@@ -10,6 +10,14 @@
  * calor ou volume. Um número com régua é acionável; sem régua é decoração.
  */
 import { duration, num, shortDate, watts } from "../../lib/format"
+import { MODALITY_TOKENS } from "../../lib/goals"
+
+const MODALITY_LABELS = {
+  outdoor: "Pedal na rua",
+  indoor: "Pedal no rolo",
+  strength: "Força",
+  other: "Outros",
+}
 
 /** Acima deste percentual, a deriva cardíaca sai da faixa esperada. */
 const DECOUPLING_THRESHOLD = 5.0
@@ -62,8 +70,37 @@ export default function SessionTable({ activities, onOpenActivity }) {
               }}
             >
               <td>{shortDate(a.date || a.started_at)}</td>
-              <td style={{ color: "var(--text-secondary)" }}>
-                {a.planned_name || a.sport_type}
+              <td style={{ fontFamily: "var(--font)", maxWidth: 280 }}>
+                <span
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}
+                  title={a.name || undefined}
+                >
+                  {a.modality && (
+                    <span
+                      className="viz-swatch"
+                      aria-label={MODALITY_LABELS[a.modality]}
+                      style={{
+                        background: `var(${MODALITY_TOKENS[a.modality]})`,
+                        borderRadius: "50%",
+                      }}
+                    />
+                  )}
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {a.name || a.planned_name || a.sport_type}
+                  </span>
+                </span>
+                {a.name && a.planned_name && (
+                  <div className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+                    plano: {a.planned_name}
+                  </div>
+                )}
               </td>
               <td style={{ textAlign: "right" }}>
                 {duration(a.moving_time_s || a.elapsed_time_s)}

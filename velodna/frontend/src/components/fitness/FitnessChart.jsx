@@ -29,6 +29,7 @@ import {
 
 import ChartFrame from "../viz/ChartFrame"
 import VizTooltip from "../viz/Tooltip"
+import { milestoneLines } from "../viz/milestoneLines"
 import { useCssVars } from "../../lib/useCssVar"
 import { axisDateFormatter, fullDate, num } from "../../lib/format"
 
@@ -61,7 +62,7 @@ const TOKENS = [
   "--surface-1",
 ]
 
-export default function FitnessChart({ pmc, health }) {
+export default function FitnessChart({ pmc, health, milestones }) {
   const [range, setRange] = useState(RANGES[1])
   const [showHealth, setShowHealth] = useState(true)
   const colors = useCssVars(TOKENS)
@@ -178,6 +179,7 @@ export default function FitnessChart({ pmc, health }) {
             dot={false}
             isAnimationActive={false}
           />
+          {milestoneLines(milestones, new Set(rows.map((r) => r.date)), colors)}
         </ComposedChart>
       </ResponsiveContainer>
 

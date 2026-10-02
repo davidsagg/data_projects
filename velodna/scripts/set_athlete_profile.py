@@ -9,6 +9,12 @@ Uso:
     .venv/bin/python scripts/set_athlete_profile.py \\
         --ftp 217 --max-hr 186 --resting-hr 58 --weight 71 \\
         --name "David Saggioro" --drop-before 2023-01-01
+
+    # Metas (repetível): métrica=valor, com prazo opcional após @
+    .venv/bin/python scripts/set_athlete_profile.py \\
+        --goal weight_kg=68 --goal weekly_hours=10@2026-12-31
+    # métricas: weight_kg, weekly_hours, ftp_w, w_per_kg, ctl
+    # remover: --goal weight_kg=
 """
 from __future__ import annotations
 
@@ -149,6 +155,43 @@ def register_cp_test(
     )
 
 
+def parse_goal(raw: str) -> tuple[str, float | None, date | None]:
+    """Lê `metrica=valor[@AAAA-MM-DD]`; valor vazio significa remover a meta.
+
+    Args:
+        raw: texto passado em `--goal`.
+
+    Returns:
+        Tupla (métrica, alvo ou None, prazo ou None).
+    """
+    metric, _, rest = raw.partition("=")
+    value, _, deadline = rest.partition("@")
+    return (
+        metric.strip(),
+        float(value.replace(",", ".")) if value.strip() else None,
+        datetime.strptime(deadline, "%Y-%m-%d").date() if deadline else None,
+    )
+
+
+def apply_goals(store: CatalogStore, athlete_id: str, raw_goals: list[str]) -> None:
+    """Cria, substitui ou remove as metas informadas.
+
+    Args:
+        store: catálogo.
+        athlete_id: UUID do atleta.
+        raw_goals: valores de `--goal`.
+    """
+    for raw in raw_goals:
+        metric, target, deadline = parse_goal(raw)
+        if target is None:
+            store.delete_goal(athlete_id, metric)
+            print(f"  {metric:18s} removida")
+            continue
+        store.set_goal(athlete_id, metric, target, deadline)
+        suffix = f" até {deadline}" if deadline else ""
+        print(f"  {metric:18s} {target:g}{suffix}")
+
+
 def drop_before(conn, cutoff: date) -> None:
     """Remove atividades anteriores ao corte, com seus dados dependentes.
 
@@ -197,6 +240,12 @@ def main() -> int:
     parser.add_argument("--threshold-hr", type=int, help="FC de limiar em bpm")
     parser.add_argument("--weight", type=float, help="Peso em kg")
     parser.add_argument(
+        "--goal",
+        action="append",
+        default=[],
+        help="Meta no formato metrica=valor[@AAAA-MM-DD] (repetível)",
+    )
+    parser.add_argument(
         "--drop-before",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
         help="Remove atividades anteriores a esta data (AAAA-MM-DD)",
@@ -231,6 +280,14 @@ def main() -> int:
 
     print("[perfil]")
     update_profile(conn, athlete_id, args)
+
+    if args.goal:
+        print("\n[metas]")
+        try:
+            apply_goals(store, athlete_id, args.goal)
+        except ValueError as error:
+            print(f"  ✗ {error}")
+            return 1
 
     if args.ftp:
         anchor_ftp(conn, athlete_id, args.ftp, args.ftp_effective)
