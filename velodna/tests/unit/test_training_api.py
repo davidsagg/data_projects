@@ -579,3 +579,15 @@ def test_capacity_profile_excludes_other_sports(client, db):
 
     points = {p["duration_s"]: p for p in payload["points"]}
     assert points[300]["best_w"] is None, "corrida não entra no perfil de bike"
+
+
+def test_wbal_returns_terrain_points_and_episodes(client, db):
+    _register_cp_test(db, cp=200.0, wp=15000.0)
+    activity_id = add(db, date(2026, 9, 8), power=[150.0] * 300 + [340.0] * 300 + [120.0] * 300)
+
+    payload = client.get(f"/activities/{activity_id}/wbal").json()
+
+    assert payload["depleted_threshold_pct"] == 25.0
+    assert {"t", "km", "alt", "kj", "w"} <= set(payload["points"][0])
+    assert len(payload["episodes"]) == 1
+    assert payload["episodes"][0]["min_pct"] < 25

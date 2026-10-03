@@ -243,6 +243,7 @@ src/
                       intervals (detecção de blocos), durability (fadiga-resistência),
                       climbs (detecção + VAM), pacing_analysis (quartos + densidade),
                       capacity (forças e limitadores),
+                      wbal_terrain (W'bal × percurso: onde o tanque esvaziou),
                       modality (rua/rolo/força/outros), goals (progresso e
                       sentido de cada meta), panorama (ciclo de N semanas),
                       weekly (semana executada + polarização),
@@ -268,17 +269,22 @@ frontend/                        ← reescrito na v2.0.0; os componentes antigos
                                    EfficiencyChart
     components/health/           ← ReadinessHero, HRVChart, WellnessChart
     components/activity/         ← ActivityPicker, ActivityDetail, ActivityCompare
-    components/planning/         ← CalendarGrid, ProjectionPanel
     components/training/         ← IntensityBar, WeekLoadChart, WBalChart/WBalPanel,
                                    IntervalPanel, DurabilityPanel
     components/panorama/         ← VolumeChart, CtlChart, MilestoneCards, CycleSettings
     components/viz/GoalPill.jsx  ← etiqueta de meta/estado (ícone + texto + fundo)
     components/viz/milestoneLines.jsx ← marcos como linhas verticais nos gráficos
     lib/goals.js                 ← texto de meta e tokens de modalidade
-    views/                       ← SummaryView, PanoramaView, FitnessView,
-                                   ActivityView, PlanningView, SegmentsView, CoachView
+    components/fitness/FitnessSection.jsx ← os meses (era a aba Fitness), no fim do Resumo
+    views/                       ← SummaryView (hoje + semana + meses), PanoramaView
+                                   (ciclo e metas), ActivityView (W'bal sobre o
+                                   percurso em destaque, logo após os números)
 
-Sete visões, todas ligadas ao backend real.
+Três abas: Resumo, Panorama, Atividade. Coach, Plano e Segmentos saíram da
+interface (2026-10-02) para focar no uso real; os endpoints continuam na API e,
+no caso dos segmentos, no MCP.
+
+Três abas, todas ligadas ao backend real.
 tests/
   unit/            ← 22 arquivos de teste (338 casos)
   integration/     ← pipeline end-to-end
@@ -324,7 +330,7 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/week` | Semana executada (seg–dom): volume, aderência, polarização |
 | GET | `/weeks` | Série das últimas N semanas |
 | GET | `/activities/{id}/intervals` | Blocos de esforço detectados, agrupados em séries |
-| GET | `/activities/{id}/wbal` | Balanço de W' ao longo da atividade (Skiba) |
+| GET | `/activities/{id}/wbal` | Balanço de W' (Skiba), com pontos alinhados a tempo/km/altitude e os trechos com o tanque abaixo de 25% |
 | GET | `/activities/{id}/durability` | Potência e EF antes/depois de X kJ acumulados |
 | GET | `/activities/{id}/climbs` | Subidas com VAM, inclinação e potência |
 | GET | `/activities/{id}/pacing` | Distribuição de intensidade por quarto do esforço |
@@ -537,6 +543,11 @@ faz a ponte entre a plataforma single-user e o schema multi-atleta.
 - **NP/IF/VI/TSS não vêm do Strava.** O `weighted_average_watts` deles usa regra
   própria que ignora pausas. O sync deixa os campos vazios e `recompute_metrics.py`
   calcula tudo sob o mesmo critério
+- **W'bal tem um valor por segundo em movimento, não por segundo decorrido.**
+  Desenhá-lo contra o tempo total (índice × duração ÷ pontos) desloca cada
+  mergulho a cada pausa. Use os `points` de `/wbal`, que trazem `t`, `km` e `alt`
+  reais (`analytics.wbal_terrain`). A decimação guarda o menor W' de cada balde —
+  amostrar um a cada N apagava os fundos, que são o que se quer ver
 - **Detecção de intervalos acha terreno, não só treino.** Num pedal de montanha cada
   subida vira um bloco; o `IntervalPanel` só exibe "séries" quando há repetição real
   (`count > 1`), para não inventar prescrição onde houve só relevo. O limiar padrão

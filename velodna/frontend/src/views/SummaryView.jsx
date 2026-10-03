@@ -7,11 +7,12 @@
  *
  *   hoje          → prontidão e o que os sinais sugerem
  *   carga         → TSS, TSS/hora, NP e IF medianos, volume
- *   forma         → CTL/ATL/TSB, com a série dos últimos 60 dias
  *   timeline      → treino e saúde no mesmo eixo de sete dias
  *   zonas         → onde a carga caiu, em barra única com faixas de %FTP
  *   dia a dia     → cada treino, planejado versus executado
  *   tendência     → a semana contra as oito anteriores
+ *   fitness       → os meses: carga (CTL/ATL/TSB), curva de potência, FTP,
+ *                   eficiência e saúde — era a aba Fitness
  *
  * A densidade é deliberada. A versão anterior seguia "máximo 5 blocos" e
  * deixava 60% de tela vazia para quem tem 760 atividades registradas.
@@ -23,8 +24,8 @@ import SessionTable from "../components/week/SessionTable"
 import WeekTimeline from "../components/week/WeekTimeline"
 import WeekTrend from "../components/week/WeekTrend"
 import ZoneBar from "../components/week/ZoneBar"
-import MiniPMC from "../components/today/MiniPMC"
 import RecommendationCard from "../components/today/RecommendationCard"
+import FitnessSection from "../components/fitness/FitnessSection"
 import ChartFrame from "../components/viz/ChartFrame"
 import ErrorState from "../components/viz/ErrorState"
 import HeroNumber from "../components/viz/HeroNumber"
@@ -57,7 +58,7 @@ function referenceFor(offset) {
   return date.toISOString().slice(0, 10)
 }
 
-export default function SummaryView({ onGoToFitness, onOpenActivity }) {
+export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
   const [offset, setOffset] = useState(0)
   const [state, setState] = useState({ loading: true })
   const [selectedDay, setSelectedDay] = useState(null)
@@ -200,6 +201,11 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
           </section>
         )}
 
+        {/* ── Semana ───────────────────────────────────────────────────── */}
+        {/* Embrulhada num bloco próprio para o cabeçalho fixo da semana parar
+            aqui: ao rolar até a seção de meses, "◀ anterior" não diz respeito
+            ao que está na tela. */}
+        <div style={{ display: "grid", gap: "var(--section-gap)" }}>
         {/* ── Carga da semana ──────────────────────────────────────────── */}
         {/* Fixo abaixo do cabeçalho: a página é longa, e ter de rolar de
               volta ao topo para trocar de semana quebra a leitura dos detalhes.
@@ -367,13 +373,6 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
           )}
         </section>
 
-        {/* ── Fitness, fadiga e forma ──────────────────────────────────── */}
-        {today?.pmc?.length > 0 && (
-          <section className="section">
-            <MiniPMC pmc={today.pmc} onOpenFitness={onGoToFitness} />
-          </section>
-        )}
-
         {/* ── Timeline treino × saúde ──────────────────────────────────── */}
         <section className="section">
           <WeekTimeline days={week.days} onSelectDay={setSelectedDay} />
@@ -433,6 +432,10 @@ export default function SummaryView({ onGoToFitness, onOpenActivity }) {
             />
           </ChartFrame>
         </section>
+        </div>
+
+        {/* ── Meses ────────────────────────────────────────────────────── */}
+        <FitnessSection athleteWeightKg={athleteWeightKg} />
       </div>
 
       <DayDrawer

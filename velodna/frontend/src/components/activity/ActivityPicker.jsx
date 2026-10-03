@@ -30,7 +30,12 @@ export default function ActivityPicker({ activities, selected, onToggle }) {
     const term = search.trim().toLowerCase()
     return (activities || [])
       .filter((a) => sport === "all" || a.sport_type === sport)
-      .filter((a) => !term || fullDate(a.started_at).toLowerCase().includes(term))
+      .filter(
+        (a) =>
+          !term ||
+          fullDate(a.started_at).toLowerCase().includes(term) ||
+          (a.name || "").toLowerCase().includes(term),
+      )
       .sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
   }, [activities, search, sport])
 
@@ -48,7 +53,7 @@ export default function ActivityPicker({ activities, selected, onToggle }) {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por data…"
+          placeholder="Buscar por nome ou data…"
           aria-label="Buscar atividades"
           style={{
             flex: "1 1 140px",
@@ -78,7 +83,7 @@ export default function ActivityPicker({ activities, selected, onToggle }) {
           <thead>
             <tr>
               <th style={{ width: 22 }} aria-label="Seleção" />
-              <th>Data</th>
+              <th>Atividade</th>
               <th style={{ width: 52 }}>Dist.</th>
               <th style={{ width: 56 }}>Tempo</th>
               <th style={{ width: 44 }}>TSS</th>
@@ -112,7 +117,25 @@ export default function ActivityPicker({ activities, selected, onToggle }) {
                       }}
                     />
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}>{shortDate(a.started_at)}</td>
+                  <td style={{ maxWidth: 150 }}>
+                    <div
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontWeight: 600,
+                        fontFamily: "var(--font)",
+                      }}
+                      title={a.name || undefined}
+                    >
+                      {a.name || shortDate(a.started_at)}
+                    </div>
+                    {a.name && (
+                      <div className="muted" style={{ fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }}>
+                        {shortDate(a.started_at)}
+                      </div>
+                    )}
+                  </td>
                   <td>{km(a.distance_m, 0)}</td>
                   <td>{duration(a.elapsed_time_s)}</td>
                   <td>{num(a.tss, 0)}</td>

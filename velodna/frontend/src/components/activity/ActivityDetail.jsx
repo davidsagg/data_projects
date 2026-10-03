@@ -22,7 +22,7 @@ import ChartFrame from "../viz/ChartFrame"
 import VizTooltip from "../viz/Tooltip"
 import StatTile from "../viz/StatTile"
 import { useCssVars } from "../../lib/useCssVar"
-import { duration, km, num, shortDuration } from "../../lib/format"
+import { duration, fullDate, km, num, shortDuration } from "../../lib/format"
 
 const TOKENS = [
   "--series-1",
@@ -33,7 +33,11 @@ const TOKENS = [
   "--text-muted",
 ]
 
-export default function ActivityDetail({ activity, streams, zones }) {
+/**
+ * @param highlight conteúdo exibido logo abaixo dos números do treino — o
+ *   painel que a tela quer em destaque (hoje, o W'bal sobre o percurso).
+ */
+export default function ActivityDetail({ activity, streams, zones, highlight }) {
   const colors = useCssVars(TOKENS)
 
   const track = useMemo(
@@ -48,6 +52,13 @@ export default function ActivityDetail({ activity, streams, zones }) {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
+      <header>
+        <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 800 }}>
+          {activity.name || "Atividade"}
+        </h1>
+        <p className="section-lede">{fullDate(activity.started_at)}</p>
+      </header>
+
       <div
         style={{
           display: "grid",
@@ -55,7 +66,11 @@ export default function ActivityDetail({ activity, streams, zones }) {
           gap: "var(--space-3)",
         }}
       >
-        <StatTile label="Distância" value={km(activity.distance_m)} />
+        <StatTile
+          label="Distância"
+          value={activity.distance_m ? num(activity.distance_m / 1000, 1) : "—"}
+          unit={activity.distance_m ? "km" : undefined}
+        />
         <StatTile label="Duração" value={duration(activity.elapsed_time_s)} />
         <StatTile
           label="NP"
@@ -79,6 +94,8 @@ export default function ActivityDetail({ activity, streams, zones }) {
           unit="m"
         />
       </div>
+
+      {highlight}
 
       {track.length > 1 && center && (
         <section className="card">

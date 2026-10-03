@@ -120,19 +120,7 @@ export const api = {
       get("/health/sleep-correlation", { params, fallback: null }),
   },
 
-  segments: {
-    list: () => get("/segments", { fallback: [] }),
-    efforts: (id) => get(`/segments/${id}/efforts`, { fallback: null }),
-    create: (body) => send("post", "/segments", body),
-    rescan: (id) => send("post", `/segments/${id}/rescan`),
-    remove: (id) => send("delete", `/segments/${id}`),
-  },
 
-  coach: {
-    chat: (body) => send("post", "/coach/chat", body),
-    history: (sessionId) => get(`/coach/chat/${sessionId}`, { fallback: [] }),
-    sessions: () => get("/coach/chat-sessions", { fallback: [] }),
-  },
 
   training: {
     week: (params) => get("/week", { params, fallback: null }),
@@ -162,14 +150,6 @@ export const api = {
     remove: (id) => send("delete", `/feedback/${id}`),
   },
 
-  planning: {
-    calendar: (params) => get("/calendar", { params, fallback: null }),
-    projection: (body) =>
-      send("post", "/planning/projection", body),
-    addWorkout: (body) =>
-      send("post", "/planning/workouts", body),
-    reconcile: () => send("post", "/planning/reconcile"),
-  },
 
   panorama: (params) => get("/panorama", { params, fallback: null }),
 

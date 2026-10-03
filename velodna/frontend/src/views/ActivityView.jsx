@@ -125,15 +125,19 @@ export default function ActivityView({ initialActivity }) {
               activity={selected[0]}
               streams={data.streams[selected[0].id]}
               zones={data.zones[selected[0].id]}
+              highlight={
+                // O W'bal sobre o percurso é a leitura principal do treino:
+                // onde o gás acabou. Vem antes do mapa e das curvas.
+                <WBalPanel
+                  activityId={selected[0].id}
+                  elapsedTimeS={selected[0].elapsed_time_s}
+                />
+              }
             />
             {/* Análises avançadas: cada painel busca o que precisa e se
                 esconde quando a atividade não sustenta a métrica. */}
             <DayContext activity={selected[0]} />
             <IntervalPanel activityId={selected[0].id} />
-            <WBalPanel
-              activityId={selected[0].id}
-              elapsedTimeS={selected[0].elapsed_time_s}
-            />
             <PacingPanel activityId={selected[0].id} />
             <ClimbPanel activityId={selected[0].id} />
             <DurabilityPanel activityId={selected[0].id} />

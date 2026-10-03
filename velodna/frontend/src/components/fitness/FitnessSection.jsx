@@ -1,5 +1,9 @@
 /*
- * Visão Fitness — o estado de forma do atleta e como ele chegou aqui.
+ * Fitness — o estado de forma do atleta e como ele chegou aqui.
+ *
+ * Era uma aba própria; virou a última seção do Resumo. A pergunta é a mesma —
+ * "como estou?" — em horizonte maior: a semana fica em cima, os meses embaixo,
+ * e não é preciso trocar de tela para ir de um ao outro.
  *
  * Ordem de leitura: os números do momento no topo, depois o PMC (que explica
  * como se chegou neles), depois as capacidades (curva de potência, FTP) e por
@@ -7,21 +11,21 @@
  */
 import { useEffect, useState } from "react"
 
-import FitnessChart from "../components/fitness/FitnessChart"
-import PowerCurveChart from "../components/fitness/PowerCurveChart"
-import FTPHistoryChart from "../components/fitness/FTPHistoryChart"
-import EfficiencyChart from "../components/fitness/EfficiencyChart"
-import CapacityProfile from "../components/fitness/CapacityProfile"
-import StatTile from "../components/viz/StatTile"
-import HRVChart from "../components/health/HRVChart"
-import WellnessChart from "../components/health/WellnessChart"
-import CorrelationPanel from "../components/health/CorrelationPanel"
-import ExportPanel from "../components/ExportPanel"
-import ErrorState from "../components/viz/ErrorState"
-import { api } from "../lib/api"
-import { formState, num } from "../lib/format"
+import FitnessChart from "./FitnessChart"
+import PowerCurveChart from "./PowerCurveChart"
+import FTPHistoryChart from "./FTPHistoryChart"
+import EfficiencyChart from "./EfficiencyChart"
+import CapacityProfile from "./CapacityProfile"
+import StatTile from "../viz/StatTile"
+import HRVChart from "../health/HRVChart"
+import WellnessChart from "../health/WellnessChart"
+import CorrelationPanel from "../health/CorrelationPanel"
+import ExportPanel from "../ExportPanel"
+import ErrorState from "../viz/ErrorState"
+import { api } from "../../lib/api"
+import { formState, num } from "../../lib/format"
 
-export default function FitnessView({ athleteWeightKg }) {
+export default function FitnessSection({ athleteWeightKg }) {
   const [state, setState] = useState({ loading: true })
 
   useEffect(() => {
@@ -53,7 +57,8 @@ export default function FitnessView({ athleteWeightKg }) {
     }
   }, [])
 
-  if (state.loading) return <p className="muted">Carregando…</p>
+  if (state.loading)
+    return <div className="skeleton" style={{ height: 320, borderRadius: "var(--radius)" }} />
   if (state.error)
     return <ErrorState error={state.error} />
 
@@ -65,7 +70,13 @@ export default function FitnessView({ athleteWeightKg }) {
   const goalWeight = state.goals?.find((g) => g.metric === "weight_kg")?.target
 
   return (
-    <div className="page">
+    <section id="fitness" className="section" style={{ gap: "var(--section-gap)", scrollMarginTop: 72 }}>
+      <div>
+        <h2 className="section-title">Fitness — os últimos meses</h2>
+        <p className="section-lede">
+          Forma acumulada, capacidades e saúde no horizonte longo: o contexto da semana acima.
+        </p>
+      </div>
       <div
         style={{
           display: "grid",
@@ -133,7 +144,7 @@ export default function FitnessView({ athleteWeightKg }) {
       <CorrelationPanel />
 
       <ExportPanel />
-    </div>
+    </section>
   )
 }
 

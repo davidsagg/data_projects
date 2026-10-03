@@ -1,39 +1,27 @@
 /*
  * Casca da aplicação — cabeçalho, navegação e alternância de tema.
  *
- * A navegação é um funil de zoom, não uma lista plana. Antes havia sete abas em
- * que "Hoje", "Semana" e "Fitness" respondiam à mesma pergunta em horizontes
- * diferentes, sem que a ordem dissesse isso — o usuário tinha de resolver a
- * hierarquia na cabeça. Agora são dois grupos:
+ * Três abas, cada uma com uma pergunta:
  *
- *   estado    Resumo → Panorama → Fitness  (semana, ciclo de 13 semanas, meses)
- *   detalhe   Atividade · Segmentos · Plano · Coach
+ *   Resumo     como estou? — hoje, a semana e, mais abaixo, os meses
+ *   Panorama   como estou indo em relação ao que quero? — o ciclo e as metas
+ *   Atividade  o que aconteceu neste treino?
  *
- * A Semana é a tela de entrada: é onde mora a pergunta central do produto.
+ * Coach, Plano e Segmentos saíram da interface para focar no que é usado; os
+ * endpoints seguem na API (e no MCP, no caso dos segmentos).
  */
 import { useEffect, useState } from "react"
 
 import SummaryView from "./views/SummaryView"
 import PanoramaView from "./views/PanoramaView"
-import FitnessView from "./views/FitnessView"
 import ActivityView from "./views/ActivityView"
-import PlanningView from "./views/PlanningView"
-import SegmentsView from "./views/SegmentsView"
-import CoachView from "./views/CoachView"
 import { api } from "./lib/api"
 import "./styles/tokens.css"
 
-const STATE_VIEWS = [
+const VIEWS = [
   { id: "summary", label: "Resumo" },
   { id: "panorama", label: "Panorama" },
-  { id: "fitness", label: "Fitness" },
-]
-
-const DETAIL_VIEWS = [
   { id: "activity", label: "Atividade" },
-  { id: "segments", label: "Segmentos" },
-  { id: "planning", label: "Plano" },
-  { id: "coach", label: "Coach" },
 ]
 
 /** Tema inicial: o que o usuário escolheu antes, senão a preferência do sistema. */
@@ -99,41 +87,9 @@ export default function App() {
             VeloDNA
           </strong>
 
-          <nav className="segmented" role="group" aria-label="Estado">
-            {STATE_VIEWS.map((v) => (
+          <nav className="segmented" role="group" aria-label="Seções">
+            {VIEWS.map((v) => (
               <button key={v.id} aria-pressed={view === v.id} onClick={() => setView(v.id)}>
-                {v.label}
-              </button>
-            ))}
-          </nav>
-
-          <nav
-            role="group"
-            aria-label="Detalhe"
-            style={{ display: "flex", gap: "var(--space-5)" }}
-          >
-            {DETAIL_VIEWS.map((v) => (
-              <button
-                key={v.id}
-                aria-pressed={view === v.id}
-                onClick={() => setView(v.id)}
-                style={{
-                  appearance: "none",
-                  border: 0,
-                  background: "transparent",
-                  font: "inherit",
-                  fontSize: "var(--fs-small)",
-                  cursor: "pointer",
-                  padding: 0,
-                  color:
-                    view === v.id ? "var(--text-primary)" : "var(--text-tertiary)",
-                  borderBottom:
-                    view === v.id
-                      ? "1px solid var(--text-primary)"
-                      : "1px solid transparent",
-                  paddingBottom: 2,
-                }}
-              >
                 {v.label}
               </button>
             ))}
@@ -156,17 +112,10 @@ export default function App() {
 
       <main>
         {view === "summary" && (
-          <SummaryView
-            onGoToFitness={() => setView("fitness")}
-            onOpenActivity={openActivity}
-          />
+          <SummaryView onOpenActivity={openActivity} athleteWeightKg={zones?.weight_kg} />
         )}
         {view === "panorama" && <PanoramaView onOpenActivity={openActivity} />}
-        {view === "fitness" && <FitnessView athleteWeightKg={zones?.weight_kg} />}
         {view === "activity" && <ActivityView initialActivity={focusedActivity} />}
-        {view === "planning" && <PlanningView />}
-        {view === "segments" && <SegmentsView />}
-        {view === "coach" && <CoachView />}
       </main>
     </div>
   )

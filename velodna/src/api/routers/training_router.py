@@ -31,6 +31,12 @@ from analytics.pacing_analysis import analyze_pacing, load_density
 from analytics.recommendation import recommend
 from analytics.timeseries import load_series
 from analytics.weekly import build_week_series, build_week_summary
+from analytics.wbal_terrain import (
+    DEPLETED_FRACTION,
+    aligned_channels,
+    depletion_episodes,
+    terrain_points,
+)
 from analytics.wprime_model import WPrimeModel
 from analytics.zones import build_power_zones
 from api.dependencies import get_athlete_id, get_db
@@ -202,6 +208,7 @@ def get_wbal(
         raise HTTPException(422, "Atividade sem dados de potência")
 
     result = WPrimeModel(w_prime, cp).compute(series)
+    channels = aligned_channels(series)
 
     return {
         "activity_id": activity_id,
@@ -212,6 +219,14 @@ def get_wbal(
         "depletion_pct": result.depletion_pct,
         "matches_burned": result.matches_burned,
         "balance": _decimate(result.balance_j, WBAL_TARGET_POINTS),
+        # Pontos com tempo real, distância e altitude: é o que permite desenhar
+        # o W'bal contra o percurso e sem o deslocamento das pausas.
+        "points": terrain_points(result.balance_j, channels, WBAL_TARGET_POINTS),
+        "depleted_threshold_pct": DEPLETED_FRACTION * 100,
+        "episodes": [
+            e.to_dict()
+            for e in depletion_episodes(result.balance_j, channels, result.w_prime_j)
+        ],
     }
 
 
