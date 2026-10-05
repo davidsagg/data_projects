@@ -11,3 +11,4 @@ bandkit-frontend-icon.png
 .coverage
 htmlcov/
 .pytest_cache/
+*.log
