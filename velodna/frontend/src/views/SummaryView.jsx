@@ -21,16 +21,15 @@ import { useEffect, useState } from "react"
 
 import DayDrawer from "../components/week/DayDrawer"
 import SessionTable from "../components/week/SessionTable"
-import WeekTimeline from "../components/week/WeekTimeline"
+import WeekGrid from "../components/week/WeekGrid"
 import WeekTrend from "../components/week/WeekTrend"
 import ZoneBar from "../components/week/ZoneBar"
 import RecommendationCard from "../components/today/RecommendationCard"
 import FitnessSection from "../components/fitness/FitnessSection"
 import ChartFrame from "../components/viz/ChartFrame"
 import ErrorState from "../components/viz/ErrorState"
-import HeroNumber from "../components/viz/HeroNumber"
-import MetricCard from "../components/viz/MetricCard"
-import GoalPill from "../components/viz/GoalPill"
+import StatCell from "../components/viz/StatCell"
+import { Pill } from "../components/viz/GoalPill"
 import { api } from "../lib/api"
 import { duration, formState, fullDate, num, shortDate } from "../lib/format"
 
@@ -101,80 +100,63 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
   const form = formState(today?.form?.tsb)
   const series = (key) => [...(state.health || [])].reverse().map((h) => h[key])
   const hoursGoal = state.goals?.find((g) => g.metric === "weekly_hours")
+  const baseline = healthBaseline(state.health)
 
   return (
     <>
       <div className="page">
         {/* ── Hoje: estado e sugestão ──────────────────────────────────── */}
         {isCurrentWeek && today && (
-          <section
-            className="section"
-            style={{
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-              alignItems: "start",
-              gap: "var(--space-8)",
-            }}
-          >
-            <div style={{ display: "grid", gap: "var(--space-4)" }}>
-              <h1 className="label" style={{ margin: 0 }}>
+          <section className="today-row">
+            <div
+              className="card card--static"
+              style={{
+                display: "grid",
+                gap: "var(--space-2)",
+                alignContent: "start",
+                borderLeft: `3px solid var(${tone.token || "--accent"})`,
+              }}
+            >
+              <span className="label">
                 Hoje ·{" "}
                 {new Date().toLocaleDateString("pt-BR", {
                   weekday: "long",
                   day: "2-digit",
                   month: "long",
                 })}
-              </h1>
-              <HeroNumber
-                value={readiness?.score == null ? "—" : num(readiness.score, 0)}
-                label="prontidão"
-                statusToken={tone.token}
-                context={tone.label}
-              />
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}>
+                <span className="figure" style={{ fontSize: "2.5rem" }}>
+                  {readiness?.score == null ? "—" : num(readiness.score, 0)}
+                </span>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <span className="muted" style={{ fontSize: "var(--fs-small)" }}>prontidão</span>
+                  <Pill tone={TONE_BY_TOKEN[tone.token]}>{tone.label}</Pill>
+                </div>
+              </div>
               <div
+                className="tabular"
                 style={{
                   display: "flex",
-                  gap: "var(--space-5)",
+                  gap: "var(--space-4)",
                   flexWrap: "wrap",
                   fontSize: "var(--fs-small)",
                   color: "var(--text-secondary)",
                 }}
               >
-                {readiness?.sleep_hours && (
-                  <span className="tabular">
-                    sono {formatSleep(readiness.sleep_hours)}
-                  </span>
-                )}
-                {readiness?.hrv_rmssd_ms && (
-                  <span className="tabular">
-                    HRV {num(readiness.hrv_rmssd_ms, 0)} ms
-                  </span>
-                )}
-                {readiness?.resting_hr_bpm && (
-                  <span className="tabular">
-                    FC rep. {readiness.resting_hr_bpm}
-                  </span>
-                )}
-                {readiness?.body_battery && (
-                  <span className="tabular">bateria {readiness.body_battery}</span>
-                )}
+                {readiness?.sleep_hours && <span>sono {formatSleep(readiness.sleep_hours)}</span>}
+                {readiness?.hrv_rmssd_ms && <span>HRV {num(readiness.hrv_rmssd_ms, 0)} ms</span>}
+                {readiness?.resting_hr_bpm && <span>FC rep. {readiness.resting_hr_bpm}</span>}
+                {readiness?.body_battery && <span>bateria {readiness.body_battery}</span>}
               </div>
               {readiness?.is_stale && (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "var(--fs-small)",
-                    color: "var(--status-warning)",
-                  }}
-                >
+                <span style={{ fontSize: "var(--fs-micro)", color: "var(--status-warning)" }}>
                   Saúde medida em {shortDate(readiness.measured_on)}.
-                </p>
+                </span>
               )}
             </div>
 
-            <RecommendationCard
-              recommendation={today.recommendation}
-              week={today.week}
-            />
+            <RecommendationCard recommendation={today.recommendation} week={today.week} />
           </section>
         )}
 
@@ -249,133 +231,141 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
 
         <section className="section">
           <div className="metric-grid">
-            <MetricCard
+            <StatCell
               label="TSS"
               value={num(week.total_tss, 0)}
-              statusToken={week.ramp_is_safe === false ? "--status-warning" : undefined}
-              context={
-                week.tss_change_pct === null
-                  ? "sem semana anterior"
-                  : `${week.tss_change_pct > 0 ? "▲" : "▼"} ${num(Math.abs(week.tss_change_pct), 1)}% vs. anterior`
+              accentToken="--ctl"
+              sub={week.baseline_tss ? `base de 4 sem: ${num(week.baseline_tss, 0)}` : "custo total da semana"}
+              tone={week.ramp_is_safe === false ? "warning" : null}
+              pill={
+                week.tss_change_pct == null
+                  ? null
+                  : `${week.tss_change_pct > 0 ? "▲" : "▼"} ${num(Math.abs(week.tss_change_pct), 0)}% vs. anterior`
               }
-              hint="Custo total da semana: duração × intensidade. Uma semana de volume moderado soma entre 250 e 450 TSS."
+              hint="Custo total da semana: duração × intensidade. Uma semana de volume moderado soma entre 250 e 450 TSS. Subir mais de 15% sobre a anterior é a faixa em que o risco de lesão cresce."
             />
-            <MetricCard
+            <StatCell
               label="TSS / hora"
               value={week.tss_per_hour ? num(week.tss_per_hour, 0) : "—"}
-              context={intensityLabel(week.tss_per_hour) || "intensidade média"}
+              accentToken="--ctl"
+              sub="intensidade média"
+              tone={intensityTone(week.tss_per_hour, 45, 55)}
+              pill={intensityLabel(week.tss_per_hour)}
               hint="TSS ÷ horas pedaladas. Perto de 40 indica base/volume; acima de 55–60, bastante trabalho de limiar ou intervalos."
             />
-            <MetricCard
+            <StatCell
               label="NP mediana"
               value={week.np_median ? num(week.np_median, 0) : "—"}
               unit={week.np_median ? "W" : undefined}
-              context="treino típico da semana"
-              hint="Potência ajustada: pesa mais os picos e variações que a média simples, refletindo o custo fisiológico real."
+              accentToken="--ctl"
+              sub="treino típico da semana"
+              hint="Potência normalizada: pesa mais os picos e variações que a média simples, refletindo o custo fisiológico real."
             />
-            <MetricCard
+            <StatCell
               label="IF mediano"
               value={week.if_median ? num(week.if_median, 2) : "—"}
-              context={
+              accentToken="--ctl"
+              sub="NP ÷ FTP"
+              tone={intensityTone(week.if_median, 0.75, 0.85)}
+              pill={
                 week.if_median == null
-                  ? "sem potência"
+                  ? null
                   : week.if_median < 0.75
                     ? "base/recuperação"
                     : week.if_median < 0.85
                       ? "moderado/tempo"
                       : "intenso"
               }
-              hint="NP ÷ FTP. Abaixo de 0,75 é base/recuperação; 0,75–0,85 moderado/tempo; acima de 0,85 bem intenso."
+              hint="Abaixo de 0,75 é base/recuperação; 0,75–0,85 moderado/tempo; acima de 0,85 bem intenso."
             />
-            <MetricCard
+            <StatCell
               label="Volume"
               value={duration(week.total_hours * 3600)}
-              context={`${num(week.total_km, 0)} km · ${num(week.total_elevation_m, 0)} m`}
-              badge={weekGoalPill(week, hoursGoal, isCurrentWeek)}
-              hint="Tempo em movimento, distância e elevação acumulados na semana."
+              accentToken="--mod-outdoor"
+              sub={`${num(week.total_km, 0)} km · ${num(week.total_elevation_m, 0)} m`}
+              {...weekGoalPill(week, hoursGoal, isCurrentWeek)}
+              hint="Tempo em movimento, distância e elevação acumulados na semana, contra a meta semanal cadastrada no Panorama."
             />
-            <MetricCard
+            <StatCell
               label="Sessões"
               value={week.session_count}
-              context={`${week.rest_days} ${week.rest_days === 1 ? "dia" : "dias"} de descanso`}
+              accentToken="--mod-outdoor"
+              sub={`${week.rest_days} ${week.rest_days === 1 ? "dia" : "dias"} de descanso`}
+              tone={week.rest_days === 0 && !isCurrentWeek ? "warning" : null}
+              pill={week.rest_days === 0 && !isCurrentWeek ? "sem dia de descanso" : null}
               hint="Treinos registrados na semana, incluindo os que não são de bike."
             />
-          </div>
 
-          {/* Segunda linha: a saúde ao lado da carga. Separá-las em telas
-              diferentes é o que o produto veio resolver. */}
-          <div className="metric-grid">
-            <MetricCard
+            <StatCell
               label="Sono médio"
               value={week.avg_sleep_hours ? formatSleep(week.avg_sleep_hours) : "—"}
-              context={
-                readiness?.sleep_quality_score
-                  ? `qualidade hoje ${readiness.sleep_quality_score}/100`
-                  : "média da semana"
-              }
+              accentToken="--sleep"
+              sub={readiness?.sleep_quality_score ? `qualidade hoje ${readiness.sleep_quality_score}/100` : "média da semana"}
+              tone={sleepTone(week.avg_sleep_hours)}
+              pill={week.avg_sleep_hours ? sleepPill(week.avg_sleep_hours) : null}
               trend={series("sleep_hours")}
               trendToken="--sleep"
               hint="Média das noites da semana. Abaixo de 7h de forma sustentada costuma aparecer no HRV e no desempenho."
             />
-            <MetricCard
+            <StatCell
               label="HRV médio"
               value={week.avg_hrv_ms ? num(week.avg_hrv_ms, 0) : "—"}
               unit={week.avg_hrv_ms ? "ms" : undefined}
-              context={
-                readiness?.hrv_rmssd_ms
-                  ? `hoje ${num(readiness.hrv_rmssd_ms, 0)} ms`
-                  : "média da semana"
-              }
+              accentToken="--hrv"
+              sub={baseline.hrv ? `base de 45 dias: ${num(baseline.hrv, 0)} ms` : "média da semana"}
+              {...vsBaseline(week.avg_hrv_ms, baseline.hrv, "hrv")}
               trend={series("hrv_rmssd_ms")}
               trendToken="--hrv"
-              hint="Variabilidade cardíaca ao acordar. O valor absoluto varia entre pessoas — o que informa é a tendência contra a própria base."
+              hint="Variabilidade cardíaca ao acordar. O valor absoluto varia entre pessoas — o que informa é a distância da própria base."
             />
-            <MetricCard
+            <StatCell
               label="FC de repouso"
               value={readiness?.resting_hr_bpm ?? "—"}
               unit={readiness?.resting_hr_bpm ? "bpm" : undefined}
-              context="45 dias"
+              accentToken="--atl"
+              sub={baseline.rhr ? `base de 45 dias: ${num(baseline.rhr, 0)} bpm` : "45 dias"}
+              {...vsBaseline(readiness?.resting_hr_bpm, baseline.rhr, "rhr")}
               trend={series("resting_hr_bpm")}
               trendToken="--atl"
               hint="Sobe com fadiga acumulada, calor, álcool ou infecção. Uma alta de 5+ bpm sobre a base merece atenção."
             />
-            <MetricCard
+            <StatCell
               label="Body battery"
               value={readiness?.body_battery ?? "—"}
-              context="45 dias"
+              accentToken="--ctl"
+              sub="hoje, de 0 a 100"
+              tone={batteryTone(readiness?.body_battery)}
+              pill={batteryPill(readiness?.body_battery)}
               trend={series("body_battery")}
               trendToken="--ctl"
               hint="Estimativa de energia disponível do Garmin, de 0 a 100, a partir de HRV, sono e estresse."
             />
-            <MetricCard
+            <StatCell
               label="Forma · TSB"
               value={today?.form?.tsb != null ? num(today.form.tsb, 0) : "—"}
-              statusToken={form.token}
-              context={form.label}
+              accentToken="--tsb-positive"
+              sub={today?.form ? `CTL ${num(today.form.ctl, 0)} · ATL ${num(today.form.atl, 0)}` : "CTL − ATL"}
+              tone={TONE_BY_TOKEN[form.token]}
+              pill={form.label}
               trend={(today?.pmc || []).slice(-45).map((d) => d.tsb)}
               trendToken="--tsb-positive"
               hint="CTL − ATL. Bem negativo é fadiga acumulada (esperado em semana pesada); perto de zero ou positivo, corpo descansado."
             />
-            <MetricCard
+            <StatCell
               label="Prontidão"
               value={readiness?.score == null ? "—" : num(readiness.score, 0)}
-              statusToken={tone.token}
-              context={tone.label}
+              accentToken={tone.token || "--accent"}
+              sub="sono, HRV, bateria e TSB"
+              tone={TONE_BY_TOKEN[tone.token]}
+              pill={tone.label}
               hint="Combina sono, HRV, body battery e TSB. Diferente do TSB, considera recuperação real, não só carga estimada."
             />
           </div>
-
-          {week.ramp_is_safe === false && (
-            <p style={{ margin: 0, fontSize: "var(--fs-small)", color: "var(--status-warning)" }}>
-              Aumento acima de 15% sobre a semana anterior — a faixa em que o
-              risco de lesão sobe.
-            </p>
-          )}
         </section>
 
         {/* ── Timeline treino × saúde ──────────────────────────────────── */}
         <section className="section">
-          <WeekTimeline days={week.days} onSelectDay={setSelectedDay} />
+          <WeekGrid days={week.days} baseline={baseline} onSelectDay={setSelectedDay} />
         </section>
 
         {/* ── Zonas ────────────────────────────────────────────────────── */}
@@ -476,21 +466,76 @@ function SummarySkeleton() {
  * falta; semana fechada diz o percentual cumprido.
  */
 function weekGoalPill(week, goal, inProgress) {
-  if (!goal) return null
+  if (!goal) return {}
   const done = week.total_hours
   const pct = (done / goal.target) * 100
-  const status = done >= goal.target ? "achieved" : pct >= 90 ? "near" : "far"
-  const text =
-    status === "achieved"
-      ? `meta ${num(goal.target, 0)} h atingida`
-      : inProgress
-        ? `faltam ${num(goal.target - done, 1)} h · meta ${num(goal.target, 0)} h`
-        : `${num(pct, 0)}% da meta · ${num(goal.target, 0)} h`
-  return (
-    <GoalPill goal={{ ...goal, status: inProgress && status === "far" ? "unknown" : status }}>
-      {text}
-    </GoalPill>
-  )
+  if (done >= goal.target) return { tone: "good", pill: `meta ${num(goal.target, 0)} h atingida` }
+  if (inProgress)
+    return { tone: null, pill: `faltam ${num(goal.target - done, 1)} h · meta ${num(goal.target, 0)} h` }
+  return {
+    tone: pct >= 90 ? "warning" : "serious",
+    pill: `${num(pct, 0)}% da meta · ${num(goal.target, 0)} h`,
+  }
+}
+
+/** Tom das etiquetas a partir dos tokens de estado que o resto do app usa. */
+const TONE_BY_TOKEN = {
+  "--status-good": "good",
+  "--status-warning": "warning",
+  "--status-serious": "serious",
+  "--status-critical": "critical",
+}
+
+/**
+ * Intensidade não é bom nem ruim — é o que a semana pedia. O tom aqui só
+ * separa as faixas: base sem cor, moderada em verde, intensa em âmbar.
+ */
+function intensityTone(value, low, high) {
+  if (value == null) return null
+  if (value < low) return null
+  if (value < high) return "good"
+  return "warning"
+}
+
+/** Médias de 45 dias de HRV e FC de repouso — a base pessoal do atleta. */
+function healthBaseline(health) {
+  const mean = (key) => {
+    const values = (health || []).map((h) => h[key]).filter((v) => v != null)
+    return values.length >= 7 ? values.reduce((a, b) => a + b, 0) / values.length : null
+  }
+  return { hrv: mean("hrv_rmssd_ms"), rhr: mean("resting_hr_bpm") }
+}
+
+/** Etiqueta de distância da base: HRV em %, FC de repouso em bpm. */
+function vsBaseline(value, base, kind) {
+  if (value == null || !base) return {}
+  if (kind === "hrv") {
+    const pct = (value / base - 1) * 100
+    const tone = pct >= -5 ? "good" : pct >= -15 ? "warning" : "serious"
+    return { tone, pill: `${pct >= 0 ? "+" : "−"}${num(Math.abs(pct), 0)}% vs. base` }
+  }
+  const delta = value - base
+  const tone = delta <= 2 ? "good" : delta <= 4 ? "warning" : "serious"
+  return { tone, pill: `${delta >= 0 ? "+" : "−"}${num(Math.abs(delta), 0)} bpm vs. base` }
+}
+
+function sleepTone(hours) {
+  if (hours == null) return null
+  return hours < 6 ? "serious" : hours < 7 ? "warning" : "good"
+}
+
+function sleepPill(hours) {
+  return hours < 6 ? "sono curto" : hours < 7 ? "abaixo de 7h" : "7h ou mais"
+}
+
+function batteryTone(value) {
+  if (value == null) return null
+  return value >= 70 ? "good" : value >= 40 ? null : "warning"
+}
+
+function batteryPill(value) {
+  if (value == null) return null
+  return value >= 70 ? "carregado" : value >= 40 ? "moderado" : "baixo"
 }
 
 function formatSleep(hours) {

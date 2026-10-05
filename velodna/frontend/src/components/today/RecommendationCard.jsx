@@ -24,7 +24,12 @@ export default function RecommendationCard({ recommendation, week }) {
   return (
     <section
       className="card card--static"
-      style={{ display: "grid", gap: "var(--space-4)" }}
+      style={{
+        display: "grid",
+        gap: "var(--space-2)",
+        alignContent: "start",
+        borderLeft: `3px solid var(${token || "--accent"})`,
+      }}
     >
       <div
         style={{
@@ -56,14 +61,15 @@ export default function RecommendationCard({ recommendation, week }) {
         </span>
       </div>
 
-      <strong style={{ fontSize: "var(--fs-lead)" }}>
+      <strong style={{ fontFamily: "var(--font-display)", fontSize: "1.0625rem" }}>
         {recommendation.headline}
       </strong>
 
       <p
         style={{
           margin: 0,
-          fontSize: "var(--fs-body)",
+          fontSize: "var(--fs-small)",
+          lineHeight: 1.5,
           color: "var(--text-secondary)",
         }}
       >
@@ -74,8 +80,8 @@ export default function RecommendationCard({ recommendation, week }) {
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "var(--space-2)",
-          paddingTop: "var(--space-3)",
+          gap: "var(--space-1) var(--space-2)",
+          paddingTop: "var(--space-2)",
           borderTop: "1px solid var(--border-subtle)",
         }}
       >

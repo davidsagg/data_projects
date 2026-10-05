@@ -273,6 +273,9 @@ frontend/                        ← reescrito na v2.0.0; os componentes antigos
                                    IntervalPanel, DurabilityPanel
     components/panorama/         ← VolumeChart, CtlChart, MilestoneCards, CycleSettings
     components/viz/GoalPill.jsx  ← etiqueta de meta/estado (ícone + texto + fundo)
+    components/viz/StatCell.jsx  ← card compacto: valor + etiqueta de tom + ⓘ com a régua
+    components/week/WeekGrid.jsx ← semana em grade densa (dias × sinais), saúde
+                                   tingida contra a média de 45 dias do atleta
     components/viz/milestoneLines.jsx ← marcos como linhas verticais nos gráficos
     lib/goals.js                 ← texto de meta e tokens de modalidade
     components/fitness/FitnessSection.jsx ← os meses (era a aba Fitness), no fim do Resumo

@@ -523,6 +523,7 @@ table.data th.num {
    dentro de um card empurrava a página inteira para o lado em tela estreita.
    Com min-width 0, quem rola é o `.scroll-x` da tabela, não a página. */
 .page > *,
+.section,
 .section > *,
 .card {
   min-width: 0;
@@ -691,4 +692,137 @@ table.data th.num {
 
 @media (max-width: 720px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* --- Dica de leitura (ⓘ) -------------------------------------------------- */
+
+/* A régua de cada métrica — consulta, não leitura diária. Abre no hover e no
+   foco do teclado; não ocupa espaço no card enquanto fechada. */
+.hint-dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.hint-dot::after {
+  content: attr(data-hint);
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: -8px;
+  width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--text-primary);
+  color: var(--surface-page);
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  /* display, não opacity: invisível com opacity 0 a caixa ainda ocupa área e,
+     num card perto da borda, fazia a página rolar na horizontal no celular. */
+  display: none;
+}
+
+.hint-dot:hover::after,
+.hint-dot:focus-visible::after {
+  display: block;
+}
+
+.hint-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- Grade semanal densa -------------------------------------------------- */
+
+.week-grid {
+  display: grid;
+  grid-template-columns: 104px repeat(7, minmax(0, 1fr));
+  font-size: var(--fs-small);
+}
+
+.week-grid > * {
+  min-width: 0;
+}
+
+.week-grid .wg-label {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-2) 0 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.week-grid .wg-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 2px 3px;
+  border-top: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.week-grid .wg-cell.is-hovered {
+  background: var(--surface-sunken);
+}
+
+.week-grid .wg-cell.is-today {
+  box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent);
+}
+
+/* Valor de saúde tingido pelo tom: o fundo carrega o estado, o texto continua
+   em tinta de texto. */
+.wg-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 46px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.wg-chip--good { background: var(--status-good-bg); }
+.wg-chip--warning { background: var(--status-warning-bg); }
+.wg-chip--serious { background: var(--status-serious-bg); }
+.wg-chip--critical { background: var(--status-critical-bg); }
+
+/* --- Linha "Hoje" do Resumo ----------------------------------------------- */
+
+.today-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  gap: var(--card-gap);
+  align-items: stretch;
+}
+
+@media (max-width: 760px) {
+  .today-row { grid-template-columns: minmax(0, 1fr); }
 }
