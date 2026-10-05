@@ -12,12 +12,12 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/python3</string>
-    <string>/Users/davidsaggioro/data_projects/special_gear/main.py</string>
+    <string>/Users/davidsaggioro/public_data_projects/special_gear/main.py</string>
   </array>
 
   <!-- Diretório de trabalho -->
   <key>WorkingDirectory</key>
-  <string>/Users/davidsaggioro/data_projects/special_gear</string>
+  <string>/Users/davidsaggioro/public_data_projects/special_gear</string>
 
   <!-- Inicia automaticamente ao fazer login -->
   <key>RunAtLoad</key>
