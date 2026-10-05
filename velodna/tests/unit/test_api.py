@@ -192,3 +192,63 @@ def test_injury_risk_stored_and_retrieved(MockCoach, client, db):
     client.post("/coach/assess-injury-risk")
     r = client.get("/coach/insights?type=injury_risk")
     assert r.status_code == 200 and len(r.json()) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Painel "como estava em" — o Resumo de uma semana passada
+# ---------------------------------------------------------------------------
+
+
+def _seed_two_moments(db):
+    """Saúde e carga em duas datas: um mês atrás e hoje."""
+    from datetime import timedelta
+
+    store = CatalogStore(db)
+    past = date.today() - timedelta(days=30)
+    store.insert_health_daily(
+        ATHLETE_ID, past, sleep_quality_score=90, hrv_rmssd_ms=60, body_battery=95
+    )
+    store.upsert_training_load(ATHLETE_ID, past, 70.0, 60.0, 10.0)
+    store.insert_health_daily(
+        ATHLETE_ID, date.today(), sleep_quality_score=40, hrv_rmssd_ms=30,
+        body_battery=20,
+    )
+    store.upsert_training_load(ATHLETE_ID, date.today(), 50.0, 80.0, -30.0)
+    return past
+
+
+def test_today_with_reference_reads_that_date(client, db):
+    past = _seed_two_moments(db)
+
+    then = client.get(f"/today?reference={past.isoformat()}").json()
+    now = client.get("/today").json()
+
+    assert then["date"] == past.isoformat()
+    assert then["form"]["tsb"] == 10.0
+    assert then["readiness"]["hrv_rmssd_ms"] == 60
+    assert then["pmc"][-1]["date"] == past.isoformat()
+    assert now["form"]["tsb"] == -30.0
+    assert now["readiness"]["hrv_rmssd_ms"] == 30
+
+
+def test_today_future_reference_falls_back_to_today(client, db):
+    from datetime import timedelta
+
+    _seed_two_moments(db)
+    future = date.today() + timedelta(days=10)
+    r = client.get(f"/today?reference={future.isoformat()}")
+    assert r.json()["date"] == date.today().isoformat()
+
+
+def test_health_daily_end_bounds_the_window(client, db):
+    past = _seed_two_moments(db)
+    rows = client.get(f"/health-daily?days=45&end={past.isoformat()}").json()
+    assert [r["date"] for r in rows] == [past.isoformat()]
+
+
+def test_health_alerts_with_reference(client, db):
+    past = _seed_two_moments(db)
+    now = client.get("/health/alerts").json()
+    then = client.get(f"/health/alerts?reference={past.isoformat()}").json()
+    assert any(a["type"] == "tsb" or "TSB" in a["message"] for a in now)
+    assert not any(a["type"] == "tsb" or "TSB" in a["message"] for a in then)

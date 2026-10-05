@@ -16,7 +16,11 @@ const INTENSITY_TOKEN = {
   intervalado: "--status-good",
 }
 
-export default function RecommendationCard({ recommendation, week }) {
+export default function RecommendationCard({
+  recommendation,
+  week,
+  label = "Hoje sugere",
+}) {
   if (!recommendation) return null
 
   const token = INTENSITY_TOKEN[recommendation.intensity]
@@ -35,12 +39,19 @@ export default function RecommendationCard({ recommendation, week }) {
         style={{
           display: "flex",
           alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: "var(--space-4)",
+          gap: "var(--space-1) var(--space-3)",
           flexWrap: "wrap",
         }}
       >
-        <h2 className="card-title">Hoje sugere</h2>
+        {/* Rótulo e manchete na mesma linha: uma linha a menos de altura no
+            bloco que divide a primeira tela com as métricas da semana. */}
+        <span className="label">{label}</span>
+        <h2
+          className="card-title"
+          style={{ fontSize: "1.0625rem", marginRight: "auto" }}
+        >
+          {recommendation.headline}
+        </h2>
         <span
           style={{
             fontSize: "var(--fs-small)",
@@ -60,10 +71,6 @@ export default function RecommendationCard({ recommendation, week }) {
           {recommendation.intensity}
         </span>
       </div>
-
-      <strong style={{ fontFamily: "var(--font-display)", fontSize: "1.0625rem" }}>
-        {recommendation.headline}
-      </strong>
 
       <p
         style={{

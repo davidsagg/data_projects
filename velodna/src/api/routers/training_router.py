@@ -302,30 +302,36 @@ def _decimate(values: list[float], target: int) -> list[float]:
 
 
 @router.get("/today")
-def get_today(db=Depends(get_db)):
+def get_today(reference: date | None = None, db=Depends(get_db)):
     """Painel do dia: prontidão, forma, semana em curso e o que ela sugere.
 
     Junta num só lugar os sinais que estavam espalhados por quatro telas. A
     recomendação vem com os sinais que a produziram — recomendação sem os
     sinais à vista é palpite com cara de resultado.
+
+    Com `reference`, o painel inteiro é montado como estava naquela data: é o
+    que deixa o Resumo de uma semana passada mostrar a forma e a prontidão do
+    fim daquela semana, e não as de hoje ao lado da carga de um mês atrás.
+    Data futura vale como hoje.
     """
     store = CatalogStore(db)
     athlete_id = _athlete_or_404(db)
+    as_of = min(reference or date.today(), date.today())
 
     pmc = query_rows(
         db,
         """
         SELECT date, ctl, atl, tsb, daily_tss FROM training_load
-        WHERE athlete_id = ? ORDER BY date DESC LIMIT 90
+        WHERE athlete_id = ? AND date <= ? ORDER BY date DESC LIMIT 90
         """,
-        [athlete_id],
+        [athlete_id, as_of],
     )
     pmc.reverse()
     latest = pmc[-1] if pmc else {}
 
-    week = build_week_summary(store, athlete_id, date.today(), with_zones=False)
-    readiness = _readiness_today(db, athlete_id)
-    profile = _capacity_limiters(db, athlete_id)
+    week = build_week_summary(store, athlete_id, as_of, with_zones=False)
+    readiness = _readiness_today(db, athlete_id, as_of)
+    profile = _capacity_limiters(db, athlete_id, as_of)
 
     advice = recommend(
         readiness=readiness.get("score") if readiness else None,
@@ -337,7 +343,7 @@ def get_today(db=Depends(get_db)):
     )
 
     return {
-        "date": date.today().isoformat(),
+        "date": as_of.isoformat(),
         "readiness": readiness,
         "form": {
             "ctl": latest.get("ctl"),
@@ -356,8 +362,8 @@ def get_today(db=Depends(get_db)):
     }
 
 
-def _readiness_today(db, athlete_id: str) -> dict | None:
-    """Prontidão de hoje, com as medidas que a compuseram.
+def _readiness_today(db, athlete_id: str, as_of: date) -> dict | None:
+    """Prontidão na data pedida, com as medidas que a compuseram.
 
     Reusa `ReadinessCalculator` pela mesma porta que `/readiness/today` usa —
     duplicar a fórmula aqui faria as duas telas divergirem no dia em que uma
@@ -366,23 +372,23 @@ def _readiness_today(db, athlete_id: str) -> dict | None:
     from health.readiness import ReadinessCalculator
     from ingestion.garmin_health_client import HealthDaily
 
-    today = date.today()
     metrics = query_row(
         db,
         """
         SELECT date, hrv_rmssd_ms, resting_hr_bpm, sleep_hours, body_battery,
                sleep_quality_score, stress_level
-        FROM health_metrics WHERE athlete_id = ? ORDER BY date DESC LIMIT 1
+        FROM health_metrics WHERE athlete_id = ? AND date <= ?
+        ORDER BY date DESC LIMIT 1
         """,
-        [athlete_id],
+        [athlete_id, as_of],
     )
     if not metrics:
         return None
 
-    load = query_row(db, "SELECT tsb FROM training_load WHERE date = ?", [today])
+    load = query_row(db, "SELECT tsb FROM training_load WHERE date = ?", [as_of])
 
     health = HealthDaily(
-        date=today,
+        date=as_of,
         sleep_score=metrics.get("sleep_quality_score"),
         hrv_rmssd_ms=metrics.get("hrv_rmssd_ms"),
         body_battery_max=metrics.get("body_battery"),
@@ -395,7 +401,7 @@ def _readiness_today(db, athlete_id: str) -> dict | None:
         "score": score,
         "recommendation": ReadinessCalculator().get_recommendation(score),
         "measured_on": metrics["date"].isoformat(),
-        "is_stale": (today - metrics["date"]).days > 1,
+        "is_stale": (as_of - metrics["date"]).days > 1,
         "hrv_rmssd_ms": metrics.get("hrv_rmssd_ms"),
         "resting_hr_bpm": metrics.get("resting_hr_bpm"),
         "sleep_hours": metrics.get("sleep_hours"),
@@ -404,9 +410,8 @@ def _readiness_today(db, athlete_id: str) -> dict | None:
     }
 
 
-def _capacity_limiters(db, athlete_id: str) -> list[str]:
+def _capacity_limiters(db, athlete_id: str, end: date) -> list[str]:
     """Durações em que o atleta está mais abaixo do próprio recorde."""
-    end = date.today()
     recent = _aggregate_curve(db, athlete_id, end - timedelta(days=90), end, "cycling")
     best = _aggregate_curve(db, athlete_id, None, None, "cycling")
     return build_profile(recent, best)["limiters"]

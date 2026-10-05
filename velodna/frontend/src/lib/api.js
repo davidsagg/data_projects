@@ -113,9 +113,10 @@ export const api = {
   },
 
   health: {
-    daily: (days = 30) => get("/health-daily", { params: { days }, fallback: [] }),
+    daily: (days = 30, end) =>
+      get("/health-daily", { params: { days, end }, fallback: [] }),
     readiness: () => get("/readiness/today", { fallback: null }),
-    alerts: () => get("/health/alerts", { fallback: [] }),
+    alerts: (params) => get("/health/alerts", { params, fallback: [] }),
     sleepCorrelation: (params) =>
       get("/health/sleep-correlation", { params, fallback: null }),
   },
@@ -132,7 +133,7 @@ export const api = {
       get(`/activities/${id}/durability`, { params, fallback: null }),
   },
 
-  today: () => get("/today", { fallback: null }),
+  today: (params) => get("/today", { params, fallback: null }),
 
   analysis: {
     climbs: (id, params) => get(`/activities/${id}/climbs`, { params, fallback: null }),

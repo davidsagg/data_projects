@@ -17,9 +17,17 @@ router = APIRouter()
 
 
 @router.get("/health-daily")
-def get_health_daily(days: int = 30, db=Depends(get_db)):
-    """Retorna os últimos N registros de saúde ordenados por data decrescente."""
-    return query_rows(db, "SELECT * FROM health_metrics ORDER BY date DESC LIMIT ?", [days])
+def get_health_daily(days: int = 30, end: date | None = None, db=Depends(get_db)):
+    """Retorna os últimos N registros de saúde ordenados por data decrescente.
+
+    Com `end`, a janela termina naquela data — a base e as tendências de uma
+    semana passada são as daquela época, não as de hoje.
+    """
+    return query_rows(
+        db,
+        "SELECT * FROM health_metrics WHERE date <= ? ORDER BY date DESC LIMIT ?",
+        [end or date.today(), days],
+    )
 
 
 @router.get("/health/sleep-correlation")
@@ -139,17 +147,23 @@ def get_readiness_today(db=Depends(get_db)):
 
 
 @router.get("/health/alerts")
-def get_health_alerts(db=Depends(get_db)):
-    """Retorna alertas ativos de overreaching com base em TSB, ramp rate e HRV."""
+def get_health_alerts(reference: date | None = None, db=Depends(get_db)):
+    """Retorna alertas ativos de overreaching com base em TSB, ramp rate e HRV.
+
+    Com `reference`, avalia os alertas como estavam naquela data.
+    """
+    today = min(reference or date.today(), date.today())
+
     # TSB e ATL mais recentes
     metrics_row = db.execute(
-        "SELECT tsb, atl FROM training_load ORDER BY date DESC LIMIT 1"
+        "SELECT tsb, atl FROM training_load WHERE date <= ? "
+        "ORDER BY date DESC LIMIT 1",
+        [today],
     ).fetchone()
     tsb = float(metrics_row[0]) if metrics_row else 0.0
     atl = float(metrics_row[1]) if metrics_row else 0.0
 
     # TSS semanal das últimas 4 semanas
-    today = date.today()
     tss_by_week: list[float] = []
     for week_offset in range(3, -1, -1):
         week_start = today - timedelta(days=today.weekday() + 7 * week_offset)
@@ -164,7 +178,8 @@ def get_health_alerts(db=Depends(get_db)):
     # HRV recente e baseline (média de 14 dias)
     hrv_rows = db.execute(
         "SELECT hrv_rmssd_ms FROM health_metrics "
-        "WHERE hrv_rmssd_ms IS NOT NULL ORDER BY date DESC LIMIT 14"
+        "WHERE hrv_rmssd_ms IS NOT NULL AND date <= ? ORDER BY date DESC LIMIT 14",
+        [today],
     ).fetchall()
     hrv_values = [float(r[0]) for r in hrv_rows]
     hrv_recent = hrv_values[0] if hrv_values else None

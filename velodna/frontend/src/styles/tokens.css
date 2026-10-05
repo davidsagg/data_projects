@@ -826,3 +826,10 @@ table.data th.num {
 @media (max-width: 760px) {
   .today-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Cola um bloco ao seguinte dentro de um grid com --section-gap: o topo do
+   Resumo (hoje → navegação da semana → métricas) é um conjunto só e precisa
+   caber na primeira tela. */
+.hug-next {
+  margin-bottom: calc(var(--card-gap) - var(--section-gap));
+}

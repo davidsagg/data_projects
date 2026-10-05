@@ -31,16 +31,16 @@ import ErrorState from "../components/viz/ErrorState"
 import StatCell from "../components/viz/StatCell"
 import { Pill } from "../components/viz/GoalPill"
 import { api } from "../lib/api"
-import { duration, formState, fullDate, num, shortDate } from "../lib/format"
+import { duration, formState, fullDate, num, shortDate, toDate } from "../lib/format"
 
 const TREND_WEEKS = 8
 
 /** Faixas de TSS/hora do guia: base, moderada, intensa. */
 function intensityLabel(tssPerHour) {
   if (tssPerHour == null) return null
-  if (tssPerHour < 45) return "semana de base/volume"
-  if (tssPerHour < 55) return "semana moderada"
-  return "semana com trabalho intenso"
+  if (tssPerHour < 45) return "base/volume"
+  if (tssPerHour < 55) return "moderada"
+  return "trabalho intenso"
 }
 
 function readinessTone(score) {
@@ -51,10 +51,33 @@ function readinessTone(score) {
   return { token: "--status-critical", label: "muito fadigado" }
 }
 
+/* Data local, não `toISOString()`: esta é UTC e, depois das 21h em Brasília,
+   já devolve o dia seguinte — no domingo à noite, a semana errada. */
+const isoLocal = (date) => date.toLocaleDateString("sv-SE")
+
 function referenceFor(offset) {
   const date = new Date()
   date.setDate(date.getDate() + offset * 7)
-  return date.toISOString().slice(0, 10)
+  return isoLocal(date)
+}
+
+/**
+ * Data em que os sinais "de momento" (prontidão, forma, bateria, base de 45
+ * dias) são lidos: hoje na semana em curso, o domingo nas semanas passadas.
+ * Sem isso o Resumo de três semanas atrás mostrava a carga daquela semana ao
+ * lado do TSB de hoje.
+ */
+function asOfFor(offset) {
+  if (offset >= 0) return undefined
+  const date = new Date()
+  date.setDate(date.getDate() + offset * 7)
+  date.setDate(date.getDate() + 6 - ((date.getDay() + 6) % 7))
+  return isoLocal(date)
+}
+
+function mean(values) {
+  const valid = values.filter((v) => v != null)
+  return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null
 }
 
 export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
@@ -68,12 +91,14 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
     setState((s) => ({ ...s, loading: true }))
     setSelectedDay(null)
 
+    const asOf = asOfFor(offset)
+
     Promise.all([
-      api.today(),
+      api.today({ reference: asOf }),
       api.training.week({ reference: referenceFor(offset) }),
       api.training.weeks({ weeks: TREND_WEEKS, reference: referenceFor(offset) }),
-      api.health.daily(45),
-      api.health.alerts(),
+      api.health.daily(45, asOf),
+      api.health.alerts({ reference: asOf }),
       api.goals.list(),
     ])
       .then(([today, week, weeks, health, alerts, goals]) => {
@@ -101,13 +126,21 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
   const series = (key) => [...(state.health || [])].reverse().map((h) => h[key])
   const hoursGoal = state.goals?.find((g) => g.metric === "weekly_hours")
   const baseline = healthBaseline(state.health)
+  const avgRestingHr = mean(week.days.map((d) => d.resting_hr_bpm))
+  const avgSleepQuality = mean(week.days.map((d) => d.sleep_quality_score))
+  const momentLabel = isCurrentWeek ? "hoje" : "no fim da semana"
 
   return (
     <>
-      <div className="page">
+      {/* Respiro menor no topo: hoje, a navegação e as doze métricas da semana
+          têm de caber na primeira tela de um notebook, sem rolar. */}
+      <div className="page" style={{ paddingTop: "var(--space-5)" }}>
         {/* ── Hoje: estado e sugestão ──────────────────────────────────── */}
-        {isCurrentWeek && today && (
-          <section className="today-row">
+        {/* Fica no lugar em qualquer semana — sumir ao voltar uma semana fazia
+            a página inteira saltar — e acompanha a semana em foco: numa semana
+            passada mostra o estado no domingo dela. */}
+        {today && (
+          <section className="today-row hug-next">
             <div
               className="card card--static"
               style={{
@@ -118,8 +151,8 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               }}
             >
               <span className="label">
-                Hoje ·{" "}
-                {new Date().toLocaleDateString("pt-BR", {
+                {isCurrentWeek ? "Hoje" : "Fim da semana"} ·{" "}
+                {toDate(today.date).toLocaleDateString("pt-BR", {
                   weekday: "long",
                   day: "2-digit",
                   month: "long",
@@ -156,12 +189,16 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               )}
             </div>
 
-            <RecommendationCard recommendation={today.recommendation} week={today.week} />
+            <RecommendationCard
+              recommendation={today.recommendation}
+              week={today.week}
+              label={isCurrentWeek ? "Hoje sugere" : "Os sinais sugeriam"}
+            />
           </section>
         )}
 
-        {state.alerts?.length > 0 && isCurrentWeek && (
-          <section className="section">
+        {state.alerts?.length > 0 && (
+          <section className="section hug-next">
             <span className="label">Alertas</span>
             <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-2)" }}>
               {state.alerts.map((alert, i) => (
@@ -193,6 +230,7 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               volta ao topo para trocar de semana quebra a leitura dos detalhes.
               O `top` acompanha a altura da barra de navegação. */}
         <header
+          className="hug-next"
           style={{
             position: "sticky",
               top: 56,
@@ -282,7 +320,13 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               label="Volume"
               value={duration(week.total_hours * 3600)}
               accentToken="--mod-outdoor"
-              sub={`${num(week.total_km, 0)} km · ${num(week.total_elevation_m, 0)} m`}
+              sub={[
+                `${num(week.total_km, 0)} km`,
+                `${num(week.total_elevation_m, 0)} m`,
+                hoursGoal && `meta ${num(hoursGoal.target, 0)} h`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
               {...weekGoalPill(week, hoursGoal, isCurrentWeek)}
               hint="Tempo em movimento, distância e elevação acumulados na semana, contra a meta semanal cadastrada no Panorama."
             />
@@ -300,7 +344,7 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               label="Sono médio"
               value={week.avg_sleep_hours ? formatSleep(week.avg_sleep_hours) : "—"}
               accentToken="--sleep"
-              sub={readiness?.sleep_quality_score ? `qualidade hoje ${readiness.sleep_quality_score}/100` : "média da semana"}
+              sub={avgSleepQuality ? `qualidade média ${num(avgSleepQuality, 0)}/100` : "média da semana"}
               tone={sleepTone(week.avg_sleep_hours)}
               pill={week.avg_sleep_hours ? sleepPill(week.avg_sleep_hours) : null}
               trend={series("sleep_hours")}
@@ -319,21 +363,21 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               hint="Variabilidade cardíaca ao acordar. O valor absoluto varia entre pessoas — o que informa é a distância da própria base."
             />
             <StatCell
-              label="FC de repouso"
-              value={readiness?.resting_hr_bpm ?? "—"}
-              unit={readiness?.resting_hr_bpm ? "bpm" : undefined}
+              label="FC rep. média"
+              value={avgRestingHr ? num(avgRestingHr, 0) : "—"}
+              unit={avgRestingHr ? "bpm" : undefined}
               accentToken="--atl"
               sub={baseline.rhr ? `base de 45 dias: ${num(baseline.rhr, 0)} bpm` : "45 dias"}
-              {...vsBaseline(readiness?.resting_hr_bpm, baseline.rhr, "rhr")}
+              {...vsBaseline(avgRestingHr, baseline.rhr, "rhr")}
               trend={series("resting_hr_bpm")}
               trendToken="--atl"
-              hint="Sobe com fadiga acumulada, calor, álcool ou infecção. Uma alta de 5+ bpm sobre a base merece atenção."
+              hint="Média das manhãs da semana. Sobe com fadiga acumulada, calor, álcool ou infecção. Uma alta de 5+ bpm sobre a base merece atenção."
             />
             <StatCell
               label="Body battery"
               value={readiness?.body_battery ?? "—"}
               accentToken="--ctl"
-              sub="hoje, de 0 a 100"
+              sub={`${momentLabel}, de 0 a 100`}
               tone={batteryTone(readiness?.body_battery)}
               pill={batteryPill(readiness?.body_battery)}
               trend={series("body_battery")}
@@ -355,7 +399,7 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
               label="Prontidão"
               value={readiness?.score == null ? "—" : num(readiness.score, 0)}
               accentToken={tone.token || "--accent"}
-              sub="sono, HRV, bateria e TSB"
+              sub={isCurrentWeek ? "sono, HRV, bateria e TSB" : momentLabel}
               tone={TONE_BY_TOKEN[tone.token]}
               pill={tone.label}
               hint="Combina sono, HRV, body battery e TSB. Diferente do TSB, considera recuperação real, não só carga estimada."
@@ -463,19 +507,17 @@ function SummarySkeleton() {
  *
  * A meta é semanal, então a semana se mede contra ela diretamente — não contra
  * a média do ciclo, que é o que o Panorama mostra. Semana em curso diz quanto
- * falta; semana fechada diz o percentual cumprido.
+ * falta; semana fechada diz o percentual cumprido. O valor da meta vai na
+ * linha de apoio do card: junto na etiqueta, o texto quebrava em duas linhas e
+ * deixava a fileira inteira mais alta.
  */
 function weekGoalPill(week, goal, inProgress) {
   if (!goal) return {}
   const done = week.total_hours
   const pct = (done / goal.target) * 100
-  if (done >= goal.target) return { tone: "good", pill: `meta ${num(goal.target, 0)} h atingida` }
-  if (inProgress)
-    return { tone: null, pill: `faltam ${num(goal.target - done, 1)} h · meta ${num(goal.target, 0)} h` }
-  return {
-    tone: pct >= 90 ? "warning" : "serious",
-    pill: `${num(pct, 0)}% da meta · ${num(goal.target, 0)} h`,
-  }
+  if (done >= goal.target) return { tone: "good", pill: "meta atingida" }
+  if (inProgress) return { tone: null, pill: `faltam ${num(goal.target - done, 1)} h` }
+  return { tone: pct >= 90 ? "warning" : "serious", pill: `${num(pct, 0)}% da meta` }
 }
 
 /** Tom das etiquetas a partir dos tokens de estado que o resto do app usa. */

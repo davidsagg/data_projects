@@ -324,7 +324,9 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/power-curve` | Curva MMP agregada (`start`, `end`, `sport`) |
 | GET | `/critical-power` | Ajuste de CP e W' na janela (`days`, `sport`) |
 | GET | `/ftp-history` | Evolução do FTP, com origem (teste / manual / estimado) |
-| GET | `/health-daily` | Últimos N registros de saúde Garmin |
+| GET | `/health-daily` | Últimos N registros de saúde Garmin (`days`, `end`) |
+| GET | `/today` | Painel do dia: prontidão, forma, semana e recomendação. Com `reference`, como estava naquela data |
+| GET | `/health/alerts` | Alertas de overreaching (`reference` para uma data passada) |
 | GET | `/readiness/today` | Score de recuperação do dia |
 | GET | `/efficiency` | Série de Efficiency Factor e decoupling |
 | GET | `/decoupling` | Deriva cardíaca nos treinos longos |
@@ -521,6 +523,11 @@ faz a ponte entre a plataforma single-user e o schema multi-atleta.
   conjunto (separação para daltonismo, faixa de luminosidade, contraste) nos dois temas — não
   trocar um hex isolado. As modalidades (`--mod-*`) foram validadas à parte; o verde e o
   laranja do claro foram escurecidos até 3:1 sobre o branco
+- **O Resumo inteiro acompanha a semana em foco.** Numa semana passada, os sinais
+  "de momento" (prontidão, forma, bateria, base de 45 dias, alertas, recomendação)
+  são lidos no domingo dela, via `reference`/`end` em `/today`, `/health-daily` e
+  `/health/alerts` (`asOfFor` em `SummaryView`). Card novo no Resumo que leia
+  "hoje" sem passar por essa data quebra a sincronia
 - **Datas puras da API (`AAAA-MM-DD`) passam por `format.toDate`.** `new Date("2026-07-06")`
   é meia-noite UTC e, em Brasília, vira o dia anterior
 - **O feedback subjetivo é a única fonte não medida do acervo.** Tudo o mais vem
