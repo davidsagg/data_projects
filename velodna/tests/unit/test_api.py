@@ -252,3 +252,22 @@ def test_health_alerts_with_reference(client, db):
     then = client.get(f"/health/alerts?reference={past.isoformat()}").json()
     assert any(a["type"] == "tsb" or "TSB" in a["message"] for a in now)
     assert not any(a["type"] == "tsb" or "TSB" in a["message"] for a in then)
+
+
+def test_today_readiness_uses_latest_load_when_today_has_none(client, db):
+    """Sem linha de carga para hoje, a prontidão usa o TSB mais recente."""
+    from datetime import timedelta
+
+    store = CatalogStore(db)
+    yesterday = date.today() - timedelta(days=1)
+    store.insert_health_daily(
+        ATHLETE_ID, yesterday, sleep_quality_score=80, hrv_rmssd_ms=45,
+        body_battery=80,
+    )
+    store.upsert_training_load(ATHLETE_ID, yesterday, 50.0, 30.0, 20.0)
+    without_today = client.get("/today").json()["readiness"]["score"]
+
+    store.upsert_training_load(ATHLETE_ID, date.today(), 50.0, 30.0, 20.0)
+    with_today = client.get("/today").json()["readiness"]["score"]
+
+    assert without_today == with_today

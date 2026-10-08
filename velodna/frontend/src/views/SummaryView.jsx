@@ -158,14 +158,40 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
                   month: "long",
                 })}
               </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}>
-                <span className="figure" style={{ fontSize: "2.5rem" }}>
-                  {readiness?.score == null ? "—" : num(readiness.score, 0)}
-                </span>
-                <div style={{ display: "grid", gap: 4 }}>
-                  <span className="muted" style={{ fontSize: "var(--fs-small)" }}>prontidão</span>
-                  <Pill tone={TONE_BY_TOKEN[tone.token]}>{tone.label}</Pill>
-                </div>
+              {/* Prontidão e carga lado a lado: a primeira diz como o corpo
+                  acordou; forma, fadiga e frescor dizem quanto treino há por
+                  trás. Lidas separadas, "73" sozinho passava por CTL. */}
+              <div className="today-figures">
+                <TodayFigure
+                  label="Prontidão"
+                  value={readiness?.score == null ? "—" : num(readiness.score, 0)}
+                  tone={TONE_BY_TOKEN[tone.token]}
+                  pill={tone.label}
+                  title="De 0 a 100: sono, HRV, body battery e TSB"
+                />
+                <TodayFigure
+                  label="Forma · CTL"
+                  value={today.form?.ctl != null ? num(today.form.ctl, 0) : "—"}
+                  pill={loadTrend(today.pmc, "ctl", 28, "4 sem")}
+                  title="Carga acumulada das últimas semanas (média de 42 dias)"
+                />
+                <TodayFigure
+                  label="Fadiga · ATL"
+                  value={today.form?.atl != null ? num(today.form.atl, 0) : "—"}
+                  pill={loadTrend(today.pmc, "atl", 7, "7 dias")}
+                  title="Carga recente (média de 7 dias): o que ainda pesa nas pernas"
+                />
+                <TodayFigure
+                  label="Frescor · TSB"
+                  value={
+                    today.form?.tsb != null
+                      ? `${today.form.tsb > 0 ? "+" : ""}${num(today.form.tsb, 0)}`
+                      : "—"
+                  }
+                  tone={TONE_BY_TOKEN[form.token]}
+                  pill={today.form?.tsb != null ? form.label : null}
+                  title="CTL − ATL: negativo é fadiga acumulada, positivo é descanso"
+                />
               </div>
               <div
                 className="tabular"
@@ -481,6 +507,29 @@ export default function SummaryView({ onOpenActivity, athleteWeightKg }) {
       />
     </>
   )
+}
+
+/** Um dos quatro números do bloco de cima: rótulo, valor e etiqueta de estado. */
+function TodayFigure({ label, value, tone, pill, title }) {
+  return (
+    <div style={{ display: "grid", gap: 2, alignContent: "start", minWidth: 0 }} title={title}>
+      <span className="label">{label}</span>
+      <span className="figure" style={{ fontSize: "2rem" }}>{value}</span>
+      {pill && <Pill tone={tone}>{pill}</Pill>}
+    </div>
+  )
+}
+
+/**
+ * Para onde o CTL ou o ATL andou na janela. O valor sozinho não diz se a forma
+ * está sendo construída ou perdida — e é essa a pergunta de quem olha para ele.
+ * A janela acompanha a constante de cada um: semanas no CTL, dias no ATL.
+ */
+function loadTrend(pmc, key, days, span) {
+  if (!pmc || pmc.length <= days) return null
+  const delta = pmc[pmc.length - 1][key] - pmc[pmc.length - 1 - days][key]
+  if (Math.abs(delta) < 1) return `estável em ${span}`
+  return `${delta > 0 ? "▲" : "▼"} ${num(Math.abs(delta), 0)} em ${span}`
 }
 
 function SummarySkeleton() {

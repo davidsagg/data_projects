@@ -385,7 +385,17 @@ def _readiness_today(db, athlete_id: str, as_of: date) -> dict | None:
     if not metrics:
         return None
 
-    load = query_row(db, "SELECT tsb FROM training_load WHERE date = ?", [as_of])
+    # A carga mais recente até a data, não a da data exata: a série de PMC só
+    # avança quando o recompute roda, e sem linha para hoje o TSB caía para 0 —
+    # a prontidão mudava de um dia para o outro sem nenhum sinal novo.
+    load = query_row(
+        db,
+        """
+        SELECT tsb FROM training_load WHERE athlete_id = ? AND date <= ?
+        ORDER BY date DESC LIMIT 1
+        """,
+        [athlete_id, as_of],
+    )
 
     health = HealthDaily(
         date=as_of,

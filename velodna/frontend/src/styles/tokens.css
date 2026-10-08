@@ -818,13 +818,23 @@ table.data th.num {
 
 .today-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(440px, 1.25fr) minmax(0, 1.6fr);
   gap: var(--card-gap);
   align-items: stretch;
 }
 
 @media (max-width: 760px) {
   .today-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+.today-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 760px) {
+  .today-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* Cola um bloco ao seguinte dentro de um grid com --section-gap: o topo do
