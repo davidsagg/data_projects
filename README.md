@@ -23,7 +23,6 @@ Each project's story is also written up as a case study on my Substack, **[David
 | [`musicdna-ai`](musicdna-ai/) | Audio analysis with embeddings, licensing match & jam simulation (7 TDD phases) | Python · vector DB · Streamlit |
 | [`Preditiva`](Preditiva/) | ML/stats case studies (Diabetes, HR turnover, Value at Risk) | pandas · scikit-learn · notebooks |
 | [`saggirag`](saggirag/) | RAG chat over finance content with Mistral 7B | RAG · Mistral · FastAPI |
-| [`special_gear`](special_gear/) | Monitor of Brazilian federal auctions for music/audio gear | Python · scraping · Telegram |
 | [`trend-radar`](trend-radar/) | Brazilian music-market trend intelligence platform | Airflow · dbt/DuckDB · ML · local LLM |
 | [`velodna`](velodna/) | Cycling performance platform | data pipeline · analytics |
 | [`work_in_progress`](work_in_progress/) | Incubator for scripts/models under development | mixed |
@@ -49,7 +48,6 @@ A história de cada projeto também vira um estudo de caso no meu Substack, **[D
 | [`musicdna-ai`](musicdna-ai/) | Análise de áudio com embeddings, licenciamento e jam sessions (7 fases TDD) | Python · vector DB · Streamlit |
 | [`Preditiva`](Preditiva/) | Cases de ML/estatística (Diabetes, Turnover RH, Value at Risk) | pandas · scikit-learn · notebooks |
 | [`saggirag`](saggirag/) | Chat com RAG sobre finanças usando Mistral 7B | RAG · Mistral · FastAPI |
-| [`special_gear`](special_gear/) | Monitor de leilões da Receita Federal p/ instrumentos/áudio | Python · scraping · Telegram |
 | [`trend-radar`](trend-radar/) | Plataforma de inteligência de tendências do mercado musical BR | Airflow · dbt/DuckDB · ML · LLM local |
 | [`velodna`](velodna/) | Plataforma de performance no ciclismo | pipeline de dados · analytics |
 | [`work_in_progress`](work_in_progress/) | Incubadora de scripts/modelos em desenvolvimento | variado |

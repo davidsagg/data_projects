@@ -39,7 +39,6 @@ Para **cada projeto** o ciclo de vida é:
 | `Preditiva` | Cases de ML/estatística (Diabetes, Turnover RH, VaR) em notebooks | — | — | ❌ | ❌ | — |
 | `saggicrm` | CRM pessoal local p/ contatos do LinkedIn (grupos, mapa, follow-ups) | — | ✅ | ✅ | ❌ | — |
 | `saggirag` | Chat com RAG sobre finanças usando Mistral 7B | ✅ | — | ❌ | ❌ | — |
-| `special_gear` | Monitor de leilões da Receita Federal p/ instrumentos/áudio | ✅ | — | ❌ | ❌ | — |
 | `trend-radar` | Plataforma de tendências do mercado musical BR (Airflow, dbt/DuckDB, ML, LLM) | ✅ | ✅ | ✅ | ❌ | `TrendRadar` (8 docs) |
 | `velodna` | Plataforma de performance no ciclismo | ✅ | ✅ | ✅ | ❌ | `VeloDNA` (10 docs) |
 | `work_in_progress` | Scripts/modelos em desenvolvimento (incubadora) | ✅ | — | ✅ | ✅ `davidsagg/work_in_progress` | — |
@@ -119,7 +118,6 @@ Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** 
 | musicdna-ai | 8003 | — | 8503 | Airflow 8080 · MLflow 5000 |
 | saggicrm | 8007 | 5177 | — | — |
 | saggirag | 8004 | 5175 | — | — |
-| special_gear | — | — | — | — (só monitor) |
 | trend-radar | 8005 | — | 8505 | Airflow 8081 · MLflow 5001 |
 | velodna | 8006 | 5176 | — | Airflow 8082 · MLflow 5002 |
 | _(compartilhado)_ | | | | **Ollama 11434** |
@@ -146,6 +144,6 @@ corrigido) e README atualizado — validado via dry-run; falta rodar `./setup_lo
   uma `data_projects/`) ficou para depois, por decisão do Dave.
 - ~~**Mapeamento `job_scout` ↔ `upwork-jobs`**~~ **RESOLVIDO**: é o mesmo projeto — começou como
   "upwork-jobs" (Drive) e virou `job_scout` (Freelancer.com) depois.
-- Projetos sem `.git`: `ficadica`, `Preditiva`, `saggirag`, `special_gear` — inicializar quando publicar.
-- Projetos sem pasta no Drive: `crypto_advisor`, `Preditiva`, `saggirag`, `special_gear`,
+- Projetos sem `.git`: `ficadica`, `Preditiva`, `saggirag` — inicializar quando publicar.
+- Projetos sem pasta no Drive: `crypto_advisor`, `Preditiva`, `saggirag`,
   `work_in_progress` — criar quando houver documentação narrativa.

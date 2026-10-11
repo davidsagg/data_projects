@@ -37,7 +37,6 @@ PROJECTS=(
   "musicdna-ai|3.11|req|requirements.txt|.venv|-"
   "saggicrm|3.11|req|backend/requirements.txt|backend/.venv|-"
   "saggirag|3.11|req|requirements.txt|.venv|-"
-  "special_gear|3.11|req|requirements.txt|.venv|-"
   "trend-radar|3.11|req|requirements.txt|.venv|-"
   "velodna|3.11|pyproject|-|.venv|-"
 )
