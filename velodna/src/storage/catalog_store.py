@@ -353,14 +353,49 @@ CREATE TABLE IF NOT EXISTS milestones (
     source        VARCHAR,
     created_at    TIMESTAMPTZ DEFAULT now()
 );
+
+-- Alimentação e balanço energético por dia, vindos do export do MacroFactor.
+-- É a outra metade da conta do peso: a carga de treino diz quanto se gastou
+-- pedalando, isto diz quanto entrou. `expenditure_kcal` é o gasto total que o
+-- MacroFactor estima a partir da ingestão e da tendência do peso — não é a
+-- caloria de exercício do Garmin. As metas são as do programa vigente no dia.
+-- Dia sem registro de comida entra com as colunas de ingestão nulas: nulo é
+-- "não registrou", que não é o mesmo que zero.
+CREATE TABLE IF NOT EXISTS nutrition_daily (
+    id                    UUID PRIMARY KEY,
+    athlete_id            UUID NOT NULL,
+    date                  DATE NOT NULL,
+    calories_kcal         FLOAT,
+    protein_g             FLOAT,
+    carbs_g               FLOAT,
+    fat_g                 FLOAT,
+    fiber_g               FLOAT,
+    expenditure_kcal      FLOAT,
+    trend_weight_kg       FLOAT,
+    target_calories_kcal  FLOAT,
+    target_protein_g      FLOAT,
+    target_carbs_g        FLOAT,
+    target_fat_g          FLOAT,
+    source                VARCHAR,
+    UNIQUE (athlete_id, date)
+);
+
+ALTER TABLE health_metrics ADD COLUMN IF NOT EXISTS body_fat_pct FLOAT;
 """
+
+# Campos aceitos em upsert_nutrition_daily
+_NUTRITION_FIELDS = frozenset({
+    "calories_kcal", "protein_g", "carbs_g", "fat_g", "fiber_g",
+    "expenditure_kcal", "trend_weight_kg", "target_calories_kcal",
+    "target_protein_g", "target_carbs_g", "target_fat_g", "source",
+})
 
 # Campos permitidos em insert_health_daily para evitar injeção de coluna
 _HEALTH_METRIC_FIELDS = frozenset({
     "hrv_rmssd_ms", "hrv_status", "resting_hr_bpm", "sleep_hours",
     "sleep_quality_score", "deep_sleep_min", "rem_sleep_min", "recovery_score",
     "body_battery", "body_battery_min", "stress_level", "vo2max_estimated",
-    "weight_kg", "steps", "source",
+    "weight_kg", "steps", "source", "body_fat_pct",
 })
 
 
@@ -915,7 +950,109 @@ class CatalogStore:
                 metrics.get("source", "manual"),
             ],
         )
+        if metrics.get("body_fat_pct") is not None:
+            self._update_health_row(
+                health_id, {"body_fat_pct": metrics["body_fat_pct"]}
+            )
         return health_id
+
+    def upsert_body_weight(
+        self,
+        athlete_id: str,
+        record_date: date,
+        weight_kg: float,
+        body_fat_pct: float | None = None,
+        source: str = "macrofactor",
+    ) -> bool:
+        """Grava uma pesagem de fonte secundária, sem passar por cima do Garmin.
+
+        O dia pode já ter linha em `health_metrics` vinda do sync do Garmin. A
+        pesagem só preenche o que estiver vazio: peso que o Garmin registrou
+        fica como está, e a `source` da linha não muda.
+
+        Args:
+            athlete_id: UUID do atleta.
+            record_date: dia da pesagem.
+            weight_kg: peso na balança.
+            body_fat_pct: percentual de gordura, quando a balança mede.
+            source: origem gravada quando o dia ainda não tem linha.
+
+        Returns:
+            True se algum valor foi gravado.
+        """
+        existing = self._find_health_by_date(athlete_id, record_date)
+        if not existing:
+            self.insert_health_daily(
+                athlete_id,
+                record_date,
+                weight_kg=weight_kg,
+                body_fat_pct=body_fat_pct,
+                source=source,
+            )
+            return True
+
+        current = self._conn.execute(
+            "SELECT weight_kg, body_fat_pct FROM health_metrics WHERE id = ?",
+            [existing],
+        ).fetchone()
+        missing = {}
+        if current[0] is None:
+            missing["weight_kg"] = weight_kg
+        if current[1] is None and body_fat_pct is not None:
+            missing["body_fat_pct"] = body_fat_pct
+        if missing:
+            self._update_health_row(existing, missing)
+        return bool(missing)
+
+    def upsert_nutrition_daily(
+        self,
+        athlete_id: str,
+        record_date: date,
+        **fields: Any,
+    ) -> str:
+        """Grava ou atualiza a alimentação de um dia, por (atleta, data).
+
+        Campos ausentes ou nulos na chamada não apagam o que já existe: um
+        export mais novo que não traga o dia inteiro não desfaz o anterior.
+
+        Args:
+            athlete_id: UUID do atleta.
+            record_date: dia do registro.
+            **fields: colunas de `nutrition_daily` (ver `_NUTRITION_FIELDS`).
+
+        Returns:
+            UUID do registro.
+
+        Raises:
+            ValueError: se algum campo não for reconhecido.
+        """
+        unknown = set(fields) - _NUTRITION_FIELDS
+        if unknown:
+            raise ValueError(f"Campos de nutrição desconhecidos: {unknown}")
+        values = {k: v for k, v in fields.items() if v is not None}
+
+        found = self._conn.execute(
+            "SELECT id FROM nutrition_daily WHERE athlete_id = ? AND date = ?",
+            [athlete_id, record_date],
+        ).fetchone()
+        if found:
+            nutrition_id = str(found[0])
+            for col, val in values.items():
+                # col é validado contra _NUTRITION_FIELDS acima
+                self._conn.execute(
+                    f"UPDATE nutrition_daily SET {col} = ? WHERE id = ?",
+                    [val, nutrition_id],
+                )
+            return nutrition_id
+
+        nutrition_id = _new_id()
+        columns = ["id", "athlete_id", "date", *values]
+        self._conn.execute(
+            f"INSERT INTO nutrition_daily ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' * len(columns))})",
+            [nutrition_id, athlete_id, record_date, *values.values()],
+        )
+        return nutrition_id
 
     # ------------------------------------------------------------------
     # Training load

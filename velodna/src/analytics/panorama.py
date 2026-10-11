@@ -16,6 +16,9 @@ O que entra:
 - **Maior esforço**: a sessão de maior TSS, comparada ao treino típico.
 - **Condicionamento**: CTL diário da janela, com os marcos por cima.
 - **Zonas**: o tempo do ciclo em cada zona de potência, só ciclismo.
+- **Alimentação**: ingestão contra gasto e tendência de peso, por semana
+  (`analytics.nutrition`) — com a contagem de dias registrados, porque o
+  registro é esparso.
 - **Marcos**: exames, planos, provas e achados — e os testes de CP registrados.
 """
 from __future__ import annotations
@@ -26,6 +29,7 @@ from datetime import date, timedelta
 from analytics.ftp_history import POWER_SPORTS, ftp_on
 from analytics.goals import evaluate_goals
 from analytics.modality import MODALITIES, MODALITY_LABELS, classify
+from analytics.nutrition import build_nutrition_cycle
 from analytics.weekly import (
     _aggregate_zones,
     _bucket_dict,
@@ -134,6 +138,9 @@ def build_panorama(
             "weeks": weekly,
         },
         "biggest_effort": _biggest_effort(activities),
+        "nutrition": build_nutrition_cycle(
+            store.conn, athlete_id, first_monday, weeks, reference
+        ),
         "ctl_series": ctl_series,
         "zones": {
             "ftp_w": ftp,

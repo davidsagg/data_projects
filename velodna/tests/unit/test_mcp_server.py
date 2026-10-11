@@ -53,6 +53,7 @@ EXPECTED_TOOLS = {
     "get_panorama",
     "get_goals",
     "get_milestones",
+    "get_nutrition",
 }
 
 

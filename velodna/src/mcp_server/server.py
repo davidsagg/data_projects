@@ -276,6 +276,20 @@ async def get_health_metrics(days: int = 60) -> list:
 
 @server.tool(
     description=(
+        "Alimentação diária vinda do MacroFactor: calorias, proteína, carboidrato, "
+        "gordura e fibra, o gasto total estimado, a tendência de peso e as metas "
+        "do programa. `balance_kcal` é ingestão menos gasto. Dias sem comida "
+        "registrada vêm com a ingestão nula — não são dias de jejum —, e dias com "
+        "`is_partial` têm registro incompleto e ficam fora das médias. O dado é "
+        "atualizado por export manual, então pode estar dias atrasado."
+    )
+)
+async def get_nutrition(days: int = 30) -> list:
+    return await _get("/nutrition", {"days": days})
+
+
+@server.tool(
+    description=(
         "Feedback subjetivo do atleta no período: esforço percebido (RPE, escala "
         "de Borg 1–10), sensação do corpo (1–5) e notas livres. É o dado que "
         "explica os outliers que os sensores não explicam — um treino fraco com "

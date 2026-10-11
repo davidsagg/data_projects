@@ -11,6 +11,7 @@ dependencies = [
     # Data ingestion — cycling file formats
     "fitparse>=1.0.2",
     "gpxpy>=1.6.2",
+    "openpyxl>=3.1",             # export .xlsx do MacroFactor
     "stravalib>=1.5",
     "garminconnect>=0.2.22",
 

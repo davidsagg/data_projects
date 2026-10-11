@@ -120,6 +120,11 @@ nos endpoints). Misturar as duas inflava o eFTP em até 25%.
     --title "Ergoespirometria" --measure vo2max_ml_kg_min=47.5 --summary "..."
 .venv/bin/python scripts/add_milestone.py --list
 
+# Importar o export do MacroFactor (alimentação, gasto, tendência, pesagens).
+# Sem argumento, pega o MacroFactor-*.xlsx mais novo de docs/dados-saude/
+.venv/bin/python scripts/import_macrofactor.py
+.venv/bin/python scripts/import_macrofactor.py --dry-run
+
 # Sincronizar saúde do Garmin — incremental e retomável
 .venv/bin/python scripts/sync_garmin_health.py --days 30
 .venv/bin/python scripts/sync_garmin_health.py --start 2023-06-24 --end 2026-06-25
@@ -159,6 +164,20 @@ builder diário procurava nunca vem preenchido; o peso mora em
 pesagens de `--weight-days` (365) numa requisição só, a cada execução. O Panorama
 usa a pesagem dos últimos 30 dias; sem ela, o cadastro do atleta.
 
+**Alimentação vem do MacroFactor, por export manual.** O app não tem API: exporta
+um `.xlsx` (More → Data Management → Data Export) que vai para `docs/dados-saude/`
+e entra por `scripts/import_macrofactor.py`. Idempotente — reimportar atualiza os
+dias. O `expenditure_kcal` é o gasto total que o MacroFactor estima da ingestão e
+da tendência de peso, não a caloria de exercício do Garmin. As pesagens do export
+preenchem `health_metrics.weight_kg` só onde o Garmin não registrou peso — e é
+por elas que o Panorama passa a ter peso recente. Dia sem comida registrada tem
+ingestão **nula**, não zero (o export traz linha zerada para dia aberto sem
+comida, e o parser a descarta). Dia de registro parcial não vem marcado: abaixo
+de `analytics.nutrition.MIN_FULL_DAY_KCAL` (800) fica fora de média e balanço.
+As médias são por dia registrado, e semana só é `reliable` com 4+ dias. O gasto
+estimado congela quando o registro para — linha reta no gráfico é falta de
+dado, não gasto estável.
+
 **Exames ficam em `docs/dados-saude/`, fora do git** (o monorepo é público). Os
 valores entram no banco como marco (`add_milestone.py`) — e só lá: nem os
 números do laudo vão para arquivo versionado. A ergoespirometria + lactato de
@@ -187,7 +206,7 @@ make mcp          # servidor em stdio
 ```
 
 Já configurado em `.mcp.json`, então o Claude Code no diretório do projeto o
-carrega sozinho. 17 ferramentas: perfil do atleta, semana, série de semanas,
+carrega sozinho. 18 ferramentas: alimentação, perfil do atleta, semana, série de semanas,
 atividades, análise completa de atividade, W'bal, carga, curva de potência,
 histórico de FTP, eficiência, saúde, feedback subjetivo, insights, segmentos,
 panorama do ciclo, metas e marcos.
@@ -234,6 +253,7 @@ cd frontend && npm run dev
 ```
 src/
   ingestion/       ← fit_parser, gpx_loader, garmin_health_client, pipeline,
+                      macrofactor (export .xlsx → nutrition_daily e pesagens),
                       strava_auth (OAuth + rotação), strava_client, strava_sync (dedupe)
   storage/         ← CatalogStore (DuckDB DDL + CRUD), models (Activity/ActivityStream),
                       query (rows/row — nomes de coluna do resultado, não da conexão)
@@ -244,6 +264,7 @@ src/
                       climbs (detecção + VAM), pacing_analysis (quartos + densidade),
                       capacity (forças e limitadores),
                       wbal_terrain (W'bal × percurso: onde o tanque esvaziou),
+                      nutrition (alimentação no ciclo: médias por dia registrado),
                       modality (rua/rolo/força/outros), goals (progresso e
                       sentido de cada meta), panorama (ciclo de N semanas),
                       weekly (semana executada + polarização),
@@ -271,7 +292,9 @@ frontend/                        ← reescrito na v2.0.0; os componentes antigos
     components/activity/         ← ActivityPicker, ActivityDetail, ActivityCompare
     components/training/         ← IntensityBar, WeekLoadChart, WBalChart/WBalPanel,
                                    IntervalPanel, DurabilityPanel
-    components/panorama/         ← VolumeChart, CtlChart, MilestoneCards, CycleSettings
+    components/panorama/         ← VolumeChart, CtlChart, MilestoneCards, CycleSettings,
+                                   EnergyChart (ingestão × gasto por semana),
+                                   WeightTrendChart (tendência de peso × meta)
     components/viz/GoalPill.jsx  ← etiqueta de meta/estado (ícone + texto + fundo)
     components/viz/StatCell.jsx  ← card compacto: valor + etiqueta de tom + ⓘ com a régua
     components/week/WeekGrid.jsx ← semana em grade densa (dias × sinais), saúde
@@ -325,6 +348,7 @@ data/              ← fit/, gpx/, velodna.duckdb (ignorados pelo git)
 | GET | `/critical-power` | Ajuste de CP e W' na janela (`days`, `sport`) |
 | GET | `/ftp-history` | Evolução do FTP, com origem (teste / manual / estimado) |
 | GET | `/health-daily` | Últimos N registros de saúde Garmin (`days`, `end`) |
+| GET | `/nutrition` | Alimentação diária do MacroFactor: macros, gasto, balanço, metas (`days`, `end`) |
 | GET | `/today` | Painel do dia: prontidão, forma, semana e recomendação. Com `reference`, como estava naquela data |
 | GET | `/health/alerts` | Alertas de overreaching (`reference` para uma data passada) |
 | GET | `/readiness/today` | Score de recuperação do dia |
@@ -386,6 +410,9 @@ DDL completo em `src/storage/catalog_store.py` (`_DDL`). Chaves são UUID.
 - `activity_streams` — série temporal com `time_s` relativo ao início (power, hr_bpm,
   cadência, GPS, altitude)
 - `health_metrics` — métricas diárias Garmin (HRV, sono, FC repouso, body battery, VO2max)
+- `nutrition_daily` — calorias, macros e fibra por dia, gasto total estimado,
+  tendência de peso e as metas do programa vigente (fonte: MacroFactor)
+- `health_metrics.body_fat_pct` — percentual de gordura das pesagens do MacroFactor
 - `training_load` — CTL / ATL / TSB / `daily_tss` por data, série diária **contínua**
 - `ftp_history` — evolução do eFTP (`effective_from`, `ftp_w`, `method`)
 - `power_curves` — melhores potências por duração, por atividade (MMP)

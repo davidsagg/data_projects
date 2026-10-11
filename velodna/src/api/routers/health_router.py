@@ -30,6 +30,36 @@ def get_health_daily(days: int = 30, end: date | None = None, db=Depends(get_db)
     )
 
 
+@router.get("/nutrition")
+def get_nutrition(days: int = 30, end: date | None = None, db=Depends(get_db)):
+    """Alimentação e balanço energético dos últimos N dias, do mais recente.
+
+    Cada dia traz ingestão (calorias e macros), gasto total estimado, tendência
+    de peso e as metas vigentes. `balance_kcal` é ingestão menos gasto — só
+    existe nos dias com registro completo: sem registro, ou com registro
+    parcial (`is_partial`), o balanço é desconhecido, não um déficit do
+    tamanho do gasto.
+    """
+    from analytics.nutrition import MIN_FULL_DAY_KCAL
+
+    end = end or date.today()
+    return query_rows(
+        db,
+        """
+        SELECT date, calories_kcal, protein_g, carbs_g, fat_g, fiber_g,
+               expenditure_kcal, trend_weight_kg, target_calories_kcal,
+               target_protein_g, target_carbs_g, target_fat_g,
+               coalesce(calories_kcal < ?, false) AS is_partial,
+               CASE WHEN calories_kcal >= ?
+                    THEN calories_kcal - expenditure_kcal END AS balance_kcal
+        FROM nutrition_daily
+        WHERE date BETWEEN ? AND ?
+        ORDER BY date DESC
+        """,
+        [MIN_FULL_DAY_KCAL, MIN_FULL_DAY_KCAL, end - timedelta(days=days - 1), end],
+    )
+
+
 @router.get("/health/sleep-correlation")
 def get_sleep_correlation(
     days: int = 365,

@@ -17,8 +17,10 @@ import { useEffect, useState } from "react"
 
 import CtlChart from "../components/panorama/CtlChart"
 import CycleSettings from "../components/panorama/CycleSettings"
+import EnergyChart from "../components/panorama/EnergyChart"
 import MilestoneCards from "../components/panorama/MilestoneCards"
 import VolumeChart from "../components/panorama/VolumeChart"
+import WeightTrendChart from "../components/panorama/WeightTrendChart"
 import ZoneBar from "../components/week/ZoneBar"
 import ChartFrame, { DataTable } from "../components/viz/ChartFrame"
 import ErrorState from "../components/viz/ErrorState"
@@ -56,6 +58,32 @@ function Tile({ label, value, unit, sub, children }) {
       {children}
     </div>
   )
+}
+
+function signedKcal(value) {
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${num(Math.abs(value), 0)}`
+}
+
+/* Para quem quer perder peso sem perder treino: déficit moderado é o alvo,
+   déficit fundo custa recuperação, e superávit vai contra a meta. */
+function balanceTone(balance) {
+  if (balance > 100) return "warning"
+  if (balance < -600) return "warning"
+  if (balance <= -150) return "good"
+  return null
+}
+
+function balanceLabel(balance) {
+  if (balance > 100) return "superávit"
+  if (balance < -600) return "déficit fundo"
+  if (balance <= -150) return "déficit moderado"
+  return "perto da manutenção"
+}
+
+function proteinTone(ratio) {
+  if (ratio >= 0.9) return "good"
+  if (ratio >= 0.7) return "warning"
+  return "serious"
 }
 
 function ModalityBadge({ modality, label }) {
@@ -97,6 +125,8 @@ export default function PanoramaView({ onOpenActivity }) {
   if (!state.data) return <PanoramaSkeleton />
 
   const { window: cycle, athlete, goals, volume, biggest_effort: effort, zones } = state.data
+  const nutrition = state.data.nutrition
+  const food = nutrition?.summary
   const goal = (metric) => goals.find((g) => g.metric === metric)
   const weightGoal = goal("weight_kg")
   const hoursGoal = goal("weekly_hours")
@@ -231,6 +261,85 @@ export default function PanoramaView({ onOpenActivity }) {
           />
         </div>
       </section>
+
+      {/* ── Alimentação e peso ─────────────────────────────────────────── */}
+      {nutrition?.has_data && (
+        <section className="section">
+          <div>
+            <h2 className="section-title">
+              Alimentação e peso — últimas {cycle.weeks} semanas
+            </h2>
+            <p className="section-lede">
+              Do MacroFactor, por export manual. As médias de ingestão contam só os dias com
+              registro completo: {food.days_logged} de {food.days_total} no ciclo
+              {food.days_partial > 0 &&
+                ` (${food.days_partial} ${food.days_partial === 1 ? "parcial ficou" : "parciais ficaram"} de fora)`}
+              {food.last_logged_on && ` · último em ${fullDate(food.last_logged_on)}`}
+            </p>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+              gap: "var(--card-gap)",
+            }}
+          >
+            <Tile
+              label="Balanço médio"
+              value={food.avg_balance_kcal == null ? "—" : signedKcal(food.avg_balance_kcal)}
+              unit={food.avg_balance_kcal == null ? undefined : "kcal / dia"}
+              sub={
+                food.avg_calories_kcal == null
+                  ? "Sem dias registrados no ciclo"
+                  : `Ingestão ${num(food.avg_calories_kcal, 0)} · gasto ${num(food.avg_expenditure_kcal, 0)} kcal`
+              }
+            >
+              {food.avg_balance_kcal != null && (
+                <Pill tone={balanceTone(food.avg_balance_kcal)}>
+                  {balanceLabel(food.avg_balance_kcal)}
+                </Pill>
+              )}
+            </Tile>
+            <Tile
+              label="Proteína média"
+              value={food.avg_protein_g == null ? "—" : num(food.avg_protein_g, 0)}
+              unit={food.avg_protein_g == null ? undefined : "g / dia"}
+              sub={
+                food.avg_protein_g != null && athlete.weight_kg
+                  ? `${num(food.avg_protein_g / athlete.weight_kg, 1)} g por kg de peso`
+                  : "Nos dias registrados"
+              }
+            >
+              {food.avg_protein_g != null && food.target_protein_g && (
+                <Pill tone={proteinTone(food.avg_protein_g / food.target_protein_g)}>
+                  {num((food.avg_protein_g / food.target_protein_g) * 100, 0)}% da meta de{" "}
+                  {num(food.target_protein_g, 0)} g
+                </Pill>
+              )}
+            </Tile>
+            <Tile
+              label="Dias registrados"
+              value={food.days_logged}
+              unit={`de ${food.days_total}`}
+              sub={`${nutrition.weeks.filter((w) => w.reliable).length} de ${cycle.weeks} semanas com ${nutrition.min_days_per_week}+ dias`}
+            >
+              {food.days_logged / food.days_total < 0.5 && (
+                <Pill tone="warning">registro ralo: leia as médias com cuidado</Pill>
+              )}
+            </Tile>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
+              gap: "var(--card-gap)",
+            }}
+          >
+            <EnergyChart nutrition={nutrition} />
+            <WeightTrendChart nutrition={nutrition} goalKg={weightGoal?.target} />
+          </div>
+        </section>
+      )}
 
       {/* ── Zonas ──────────────────────────────────────────────────────── */}
       <section className="section">
