@@ -37,7 +37,6 @@ Para **cada projeto** o ciclo de vida é:
 | `job_scout` | Monitor de vagas (Freelancer.com via RSS) com scoring Claude + Telegram | ✅ | ✅ | ✅ | ❌ | `upwork-jobs` (2 docs) |
 | `musicdna-ai` | Análise de áudio com embeddings, licenciamento e jam sessions (7 fases, TDD) | — | ✅ | ✅ | ❌ | `MusicDNA` (9 .docx) |
 | `Preditiva` | Cases de ML/estatística (Diabetes, Turnover RH, VaR) em notebooks | — | — | ❌ | ❌ | — |
-| `saggicrm` | CRM pessoal local p/ contatos do LinkedIn (grupos, mapa, follow-ups) | — | ✅ | ✅ | ❌ | — |
 | `saggirag` | Chat com RAG sobre finanças usando Mistral 7B | ✅ | — | ❌ | ❌ | — |
 | `trend-radar` | Plataforma de tendências do mercado musical BR (Airflow, dbt/DuckDB, ML, LLM) | ✅ | ✅ | ✅ | ❌ | `TrendRadar` (8 docs) |
 | `velodna` | Plataforma de performance no ciclismo | ✅ | ✅ | ✅ | ❌ | `VeloDNA` (10 docs) |
@@ -116,7 +115,6 @@ Evita conflito ao rodar mais de um projeto ao mesmo tempo. Rodar **um por vez** 
 | ficadica | 8765 (dashboard) | — | — | — |
 | job_scout | — | — | — | — (só Telegram) |
 | musicdna-ai | 8003 | — | 8503 | Airflow 8080 · MLflow 5000 |
-| saggicrm | 8007 | 5177 | — | — |
 | saggirag | 8004 | 5175 | — | — |
 | trend-radar | 8005 | — | 8505 | Airflow 8081 · MLflow 5001 |
 | velodna | 8006 | 5176 | — | Airflow 8082 · MLflow 5002 |
